@@ -1556,6 +1556,15 @@ export interface PairedRelayAgent {
   /** Agent name the Pi reported, for display only. */
   agentName: string
   /**
+   * The name of the computer the Pi runs on, as the Pi reported it in `pair_ok`.
+   *
+   * Distinct from `agentName`, which is the session's agent name: two sessions in
+   * one folder share that, so using it as a machine label made one machine look
+   * like several with the same name. Undefined for a Pi that did not report one,
+   * and for a pairing made before this field was stored.
+   */
+  machineName?: string
+  /**
    * The room this Pi is running in, as reported by `pair_ok`.
    *
    * Required for addressing: the relay keys delivery on the exact

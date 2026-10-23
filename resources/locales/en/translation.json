@@ -2175,6 +2175,8 @@
     "newLinkedTaskTitle": "New linked task across several repositories",
     "newSessionAriaLabel": "New session in this project",
     "newSessionFallback": "New session",
+    "remoteSessionCount_one": "{{count}} session",
+    "remoteSessionCount_other": "{{count}} sessions",
     "removeWorkspaceAriaLabel": "Remove {{name}}",
     "sessions": "Sessions",
     "tools": "Tools"

@@ -15,6 +15,8 @@ export interface RelayPeerRecord {
   target: {
     pubkey: string
     agentName: string
+    /** The computer's name as the Pi reported it; absent on older records. */
+    machineName?: string
     roomId: string | null
     pairedAt: string
   } | null

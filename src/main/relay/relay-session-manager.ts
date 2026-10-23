@@ -223,6 +223,7 @@ export class RelaySessionManager extends EventEmitter {
       ...provisional,
       agentName: accepted?.session_name ?? provisional.agentName,
       roomId: accepted?.room_id ?? provisional.roomId,
+      machineName: accepted?.hostname ?? provisional.machineName,
     }
 
     await this.options.onPaired?.(agent)
@@ -300,7 +301,14 @@ export class RelaySessionManager extends EventEmitter {
     // for more than that is a no-op but asking for nothing guarantees the 30.
     // A remote session should show the same depth of history a local one does,
     // so request the server's maximum rather than its minimum.
-    const reply = await this.request({ type: 'session_sync', id: '', limit: Number.MAX_SAFE_INTEGER }, target)
+    const reply = await this.request({ type: 'session_sync', id: '', limit: Number.MAX_SAFE_INTEGER }, target).catch((error: unknown) => {
+      // The relay drops a frame for a `(peer, room)` pair with no live
+      // connection and answers with nothing at all, so a timeout here means the
+      // session is gone rather than the Pi being slow. Re-asking for the roster
+      // lets the dead row disappear instead of being offered again.
+      this.options.transport.sendControl({ type: 'rooms_check', peers: [target.peer] })
+      throw error
+    })
     if (reply.type === 'error') throw new Error(reply.message ?? reply.code)
     return { events: reply as RelayServerMessage & { type: 'session_history' } }
   }
@@ -409,7 +417,13 @@ export class RelaySessionManager extends EventEmitter {
     const agent = this.state.agent
     if (!agent) throw new Error('This desktop is not paired with a Pi yet')
     const known = this.state.rooms.some((room) => room.room_id === roomId)
-    if (!known) throw new Error('That session is no longer open on the paired Pi')
+    if (!known) {
+      // A row outlives the session it names: the Pi may have closed it since the
+      // roster was pushed. Re-asking makes the stale row disappear instead of
+      // leaving the user clicking it again.
+      this.options.transport.sendControl({ type: 'rooms_check', peers: [agent.pubkey] })
+      throw new Error('That session is no longer open on the paired Pi')
+    }
     const selected: PairedRelayAgent = { ...agent, roomId }
     this.patch({ agent: selected })
     await this.options.onPaired?.(selected)

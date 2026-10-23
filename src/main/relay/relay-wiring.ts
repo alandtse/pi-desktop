@@ -62,13 +62,25 @@ class FileRelayPeerPersistence implements RelayPeerPersistence {
   }
 }
 
-function toAgent(target: { pubkey: string; agentName: string; roomId: string | null; pairedAt: string } | null): PairedRelayAgent | null {
+function toAgent(target: { pubkey: string; agentName: string; machineName?: string; roomId: string | null; pairedAt: string } | null): PairedRelayAgent | null {
   if (!target) return null
-  return { pubkey: target.pubkey, agentName: target.agentName, roomId: target.roomId, pairedAt: target.pairedAt }
+  return {
+    pubkey: target.pubkey,
+    agentName: target.agentName,
+    machineName: target.machineName,
+    roomId: target.roomId,
+    pairedAt: target.pairedAt,
+  }
 }
 
 function toTarget(agent: PairedRelayAgent) {
-  return { pubkey: agent.pubkey, agentName: agent.agentName, roomId: agent.roomId, pairedAt: agent.pairedAt }
+  return {
+    pubkey: agent.pubkey,
+    agentName: agent.agentName,
+    machineName: agent.machineName,
+    roomId: agent.roomId,
+    pairedAt: agent.pairedAt,
+  }
 }
 
 /** Builds the bridge the IPC handlers and the app lifecycle share. */

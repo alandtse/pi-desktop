@@ -2110,6 +2110,7 @@
     "newLinkedTaskTitle": "新建跨多个仓库的关联任务",
     "newSessionAriaLabel": "在此项目中新建会话",
     "newSessionFallback": "新建会话",
+    "remoteSessionCount_other": "{{count}} 个会话",
     "removeWorkspaceAriaLabel": "移除 {{name}}",
     "sessions": "会话",
     "tools": "工具"

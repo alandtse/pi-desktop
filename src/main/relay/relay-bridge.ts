@@ -378,7 +378,9 @@ function toRemoteSessionRow(
     messageCount: 1,
     projectPath: room.cwd,
     projectName: folderName,
-    remote: { peer: agent.pubkey, roomId: room.room_id, hostname: agent.agentName || undefined },
+    // The machine's name, never the agent's: `agentName` is the session's, so two
+    // sessions in one folder carried it too and one machine looked like several.
+    remote: { peer: agent.pubkey, roomId: room.room_id, hostname: agent.machineName || undefined },
   }
   return { session, ref: session.remote! }
 }

@@ -91,30 +91,41 @@ test('a remote session is not a chat inside a local project', () => {
   assert.deepEqual(tabs.map((tab) => tab.id), ['local'])
 })
 
-test('the sessions of one remote folder form one project tab', () => {
-  // Two sessions from the same folder are two chats in one project, exactly as
-  // they would be locally.
+test('every session on one machine is one project tab', () => {
+  // The machine is the tab: two folders on the same Pi are chats of one
+  // computer, not two projects sitting beside the local ones.
   const projects = remoteProjectTabs([
     remoteRow('room-a', '/Users/alandtse', 'alandtse', 'alandtse'),
     remoteRow('room-b', '/Users/alandtse', 'alandtse', 'alandtse#2'),
     remoteRow('room-c', '/Users/alandtse/open-shaders', 'open-shaders', 'open-shaders'),
   ])
-  assert.equal(projects.length, 2)
-  assert.equal(projects[0].title, 'alandtse')
-  assert.deepEqual(projects[0].rows.map((row) => row.ref.roomId), ['room-a', 'room-b'])
-  assert.equal(projects[0].hostname, 'mac')
-  assert.equal(projects[1].title, 'open-shaders')
-  assert.deepEqual(projects[1].rows.map((row) => row.ref.roomId), ['room-c'])
+  assert.equal(projects.length, 1)
+  assert.deepEqual(projects[0].rows.map((row) => row.ref.roomId), ['room-a', 'room-b', 'room-c'])
+  assert.deepEqual(projects[0].paths, ['/Users/alandtse', '/Users/alandtse/open-shaders'])
 })
 
-test('a remote project tab is named after the folder, not the machine', () => {
+test('a remote tab is named after the machine, not a folder', () => {
+  // Naming it after a folder made one machine look like several, and made two
+  // of its sessions look like a project and a folder with the same name.
   const projects = remoteProjectTabs([remoteRow('room', 'C:/work/thing', 'thing', 'thing')])
-  assert.equal(projects[0].title, 'thing')
-  assert.equal(projects[0].id, 'remoteProject:peer:C:/work/thing')
+  assert.equal(projects[0].title, 'mac')
+  assert.equal(projects[0].id, 'remoteMachine:peer')
 })
 
-test('a Windows folder path on the other machine still yields a folder name', () => {
-  // The roster can name a folder with backslashes; the tab shows its last part.
-  const projects = remoteProjectTabs([remoteRow('room', 'C:\\work\\thing', 'thing', 'thing')])
-  assert.equal(projects[0].title, 'thing')
+test('the chats of the machine on screen are session tabs beside local chats', () => {
+  const runtimes = { local: runtime('local', 'project', '/local') }
+  const machine = remoteProjectTabs([
+    remoteRow('room-a', '/Users/alandtse', 'alandtse', 'alandtse'),
+    remoteRow('room-b', '/Users/alandtse/open-shaders', 'open-shaders', 'open-shaders'),
+  ])
+  const tabs = sessionTabs({
+    runtimes,
+    workspaceId: 'project',
+    sessionList: [],
+    remoteRows: machine[0].rows,
+    newSessionFallback: 'New',
+  })
+  assert.deepEqual(tabs.map((tab) => tab.id), ['remote:peer:room-a', 'remote:peer:room-b', 'local'])
+  // A chat is named by its session: the folder is the same for its siblings.
+  assert.deepEqual(tabs.slice(0, 2).map((tab) => tab.title), ['alandtse', 'open-shaders'])
 })

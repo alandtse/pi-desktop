@@ -77,15 +77,18 @@ export function WorkspaceTabs(): React.JSX.Element {
   }, [activeRemoteRef, remoteProjects])
 
   // The strip under the project row is the chats in the project on screen.
+  // When that "project" is another machine, its sessions are those chats, so a
+  // remote session switches exactly the way a local one does.
+  const activeRemoteProject = remoteProjects.find((project) => project.id === activeRemoteProjectId)
   const sessionTabs = useMemo(
     () => getSessionTabs({
       runtimes: sessionRuntimes,
       workspaceId: activeWorkspace?.id,
-      // Only local chats: remote ones are project tabs now.
       sessionList: [],
+      remoteRows: activeRemoteProject?.rows ?? [],
       newSessionFallback: t('workspaceTabs.newSessionFallback'),
     }),
-    [activeWorkspace?.id, sessionRuntimes, sessionList]
+    [activeWorkspace?.id, sessionRuntimes, activeRemoteProject]
   )
 
   return (
@@ -250,14 +253,15 @@ export function WorkspaceTabs(): React.JSX.Element {
               type="button"
               onClick={openProject}
               className="flex min-w-0 flex-1 items-center gap-2 text-left"
-              title={`${project.rows[0]?.session.projectPath ?? project.title}${project.hostname ? `
-${project.hostname}` : ''}`}
+              // The tab names the machine; hovering names where its sessions run,
+              // which is the part a tab has no room to show.
+              title={project.paths.length > 0 ? project.paths.join('\n') : project.title}
             >
               <Laptop size={13} className="shrink-0 text-faint" />
               <span className="min-w-0 flex-1 truncate font-medium">{project.title}</span>
-              {project.hostname && (
-                <span className="shrink-0 truncate text-[10px] text-faint">{project.hostname}</span>
-              )}
+              <span className="shrink-0 text-[10px] text-faint">
+                {t('workspaceTabs.remoteSessionCount', { count: project.rows.length })}
+              </span>
               {working && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-accent-fg" />}
             </button>
           </div>
