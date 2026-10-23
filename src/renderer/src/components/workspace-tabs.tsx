@@ -90,7 +90,10 @@ export function WorkspaceTabs(): React.JSX.Element {
       remoteRows: activeRemoteProject?.rows ?? [],
       newSessionFallback: t('workspaceTabs.newSessionFallback'),
     }),
-    [activeWorkspace?.id, sessionRuntimes, activeRemoteProject]
+    // `sessionList` lands after the first paint, so it must be a dependency or
+    // the tabs keep the names they had before it arrived — every local chat
+    // stayed "New Session" until something else forced a recalculation.
+    [activeWorkspace?.id, sessionRuntimes, activeRemoteProject, sessionList, t]
   )
 
   return (

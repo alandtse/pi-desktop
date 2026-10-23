@@ -77,6 +77,9 @@ export function ChatInput({ dropZoneRef }: ChatInputProps): React.JSX.Element {
   const { t } = useTranslation()
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const workspaceId = useAppStore((state) => state.activeWorkspace?.id ?? '')
+  // Drafts belong to the chat on screen, so switching between two sessions in
+  // one folder (or into a remote session) does not carry text across.
+  const chatKey = useAppStore((state) => state.activeChatKey)
   const composerFocusRequested = useAppStore((state) => state.composerFocusRequested)
   const sessionLoading = useAppStore((state) => state.sessionLoading)
   const currentView = useAppStore((state) => state.currentView)
@@ -235,7 +238,7 @@ export function ChatInput({ dropZoneRef }: ChatInputProps): React.JSX.Element {
   useLayoutEffect(() => {
     const ta = textareaRef.current
     if (!ta) return
-    const saved = useAppStore.getState().composerDrafts[workspaceId] ?? EMPTY_COMPOSER_DRAFT
+    const saved = useAppStore.getState().composerDrafts[chatKey] ?? EMPTY_COMPOSER_DRAFT
     ta.value = saved.text
     resizeTextarea(ta)
     setAttachments(saved.attachments)
@@ -250,12 +253,12 @@ export function ChatInput({ dropZoneRef }: ChatInputProps): React.JSX.Element {
     // running dictation stops, so its late text cannot land in the next draft.
     return () => {
       cancelDictation()
-      useAppStore.getState().saveComposerDraft(workspaceId, {
+      useAppStore.getState().saveComposerDraft(chatKey, {
         text: composerDraftText(ta.value, historyIndex.current, draft.current),
         attachments: attachmentsRef.current,
       })
     }
-  }, [workspaceId, resizeTextarea, cancelDictation])
+  }, [chatKey, resizeTextarea, cancelDictation])
 
   // Search the workspace for the active mention query (debounced). An empty
   // query yields no results, so the popup stays hidden until the user types.
@@ -367,10 +370,10 @@ export function ChatInput({ dropZoneRef }: ChatInputProps): React.JSX.Element {
       attachmentsRef.current = []
       setAttachments([])
       resetComposer()
-      useAppStore.getState().saveComposerDraft(workspaceId, EMPTY_COMPOSER_DRAFT)
+      useAppStore.getState().saveComposerDraft(chatKey, EMPTY_COMPOSER_DRAFT)
       return taken
     },
-    [attachments, recordPrompt, resetComposer, workspaceId]
+    [attachments, chatKey, recordPrompt, resetComposer]
   )
 
   // Send now, into a running turn too (Ctrl/Cmd+Enter, and every send while idle).

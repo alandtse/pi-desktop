@@ -479,7 +479,14 @@ interface AppState {
   // workspace is open), so switching projects never carries one project's
   // draft into another.
   composerDrafts: Record<string, ComposerDraft>
-  saveComposerDraft: (workspaceId: string, draft: ComposerDraft) => void
+  /**
+   * Stores the unsent text for one CHAT.
+   *
+   * Keyed by `activeChatKey`, not by workspace: two sessions in one folder
+   * shared a draft box, so text typed into a remote session reappeared in the
+   * local one and the composer looked like it followed the last field used.
+   */
+  saveComposerDraft: (chatKey: string, draft: ComposerDraft) => void
   /** Messages sent while the agent was busy, per workspace (see send-queue.ts). */
   sendQueues: SendQueues
   /**
@@ -1146,6 +1153,32 @@ function releaseSendQueue(set: ZustandSet, get: () => AppState & AppActions): vo
 }
 
 /**
+ * Drops the unsent text of every chat belonging to a project that was removed.
+ *
+ * A chat's draft key names a session file or a runtime id, neither of which
+ * mentions the project, so the project's chats are resolved from the runtimes
+ * still registered for it. Without this a late composer save could keep text
+ * for a project that no longer exists, which is what the workspace-keyed guard
+ * used to prevent.
+ */
+function withoutProjectDrafts(
+  drafts: Record<string, ComposerDraft>,
+  removedWorkspaceId: string,
+  runtimes: Record<string, SessionRuntimeInfo>,
+): Record<string, ComposerDraft> {
+  const next = { ...drafts }
+  for (const runtime of Object.values(runtimes)) {
+    if (runtime.workspaceId !== removedWorkspaceId) continue
+    delete next[localQueueKey(runtime.sessionPath, runtime.runtimeId)]
+    if (runtime.sessionPath) delete next[localQueueKey(runtime.sessionPath, null)]
+  }
+  // The project itself is not a chat, but a composer can still save under it
+  // while the removal is settling; that entry must not survive.
+  delete next[removedWorkspaceId]
+  return next
+}
+
+/**
  * Drops the queues of every chat belonging to a project that was removed.
  *
  * A project owns several chats and a chat's key names a session file or a relay
@@ -1568,14 +1601,16 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
   taskLauncherOpen: false,
   linkedTaskDialog: null,
   composerDrafts: {},
-  saveComposerDraft: (workspaceId, draft) => set((state) => {
-    // The composer saves on unmount and on workspace change, which also fires
-    // after its workspace was removed; a removed workspace keeps no draft.
-    const isRemovedWorkspace = workspaceId !== '' && !state.workspaces.some((w) => w.id === workspaceId)
+  saveComposerDraft: (chatKey, draft) => set((state) => {
     const composerDrafts = { ...state.composerDrafts }
     const hasContent = draft.text !== '' || draft.attachments.length > 0
-    if (hasContent && !isRemovedWorkspace) composerDrafts[workspaceId] = draft
-    else delete composerDrafts[workspaceId]
+    // A chat key names a session file or a relay room, so it never matches a
+    // workspace id — but the composer also saves on unmount after its project
+    // was removed, and a key that names a project that is gone keeps nothing.
+    const namesRemovedProject =
+      chatKey !== '' && !state.workspaces.some((workspace) => workspace.id === chatKey)
+    if (hasContent && !namesRemovedProject) composerDrafts[chatKey] = draft
+    else delete composerDrafts[chatKey]
     return { composerDrafts }
   }),
   sendQueues: {},
@@ -3991,6 +4026,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
       await get().loadWorkspaces()
       get().saveComposerDraft(workspaceId, EMPTY_COMPOSER_DRAFT)
       set((state) => ({
+        composerDrafts: withoutProjectDrafts(state.composerDrafts, workspaceId, state.sessionRuntimes),
         sendQueues: withoutProjectQueues(state.sendQueues, workspaceId, state.sessionRuntimes),
         heldSendQueues: state.heldSendQueues.filter((id) => id !== workspaceId),
       }))
