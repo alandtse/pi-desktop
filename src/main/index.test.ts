@@ -18,9 +18,11 @@ const source = ts.createSourceFile(
 const lifecycle = source.statements.filter((node) => {
   if (ts.isVariableStatement(node)) {
     return node.declarationList.declarations.some((declaration) =>
-      ['isQuitting', 'shutdownPending', 'shutdownComplete'].includes(declaration.name.getText(source)))
+      ['isQuitting', 'shutdownPending', 'shutdownComplete', 'recordedMidTurn'].includes(declaration.name.getText(source)))
   }
-  if (ts.isFunctionDeclaration(node)) return node.name?.text === 'showMainWindow'
+  if (ts.isFunctionDeclaration(node)) {
+    return ['showMainWindow', 'recordMidTurnOnce'].includes(node.name?.text ?? '')
+  }
   if (!ts.isExpressionStatement(node) || !ts.isCallExpression(node.expression)) return false
   const call = node.expression
   return call.expression.getText(source) === 'app.on'
@@ -80,6 +82,10 @@ function setup(stopAll?: () => Promise<void>) {
       flushSync: () => { calls.push('flush-log') },
     },
     cleanupPiChildTempDir: () => { calls.push('cleanup-temp') },
+    // The mid-turn record is best-effort bookkeeping; the quit must behave the
+    // same whether or not a tracker exists, which this null exercises.
+    turnTracker: null,
+    recordMidTurnOnQuit: async () => { calls.push('record-mid-turn') },
   }
   const code = ts.transpile(lifecycle, { target: ts.ScriptTarget.ES2022 })
   const showMainWindow = new Function(...Object.keys(bindings), `${code}; return showMainWindow`)(

@@ -103,29 +103,44 @@ test('tailMessagesFrom ignores non-message records and keeps tool call ids', () 
 
 test('a continuation is sent only for an unfinished turn with the feature on', () => {
   const base = { enabled: true, prompt: 'continue', alreadyHandled: false }
-  assert.equal(continuationPrompt({ ...base, reason: 'tool-call-unanswered' }), 'continue')
-  assert.equal(continuationPrompt({ ...base, reason: 'no-reply' }), 'continue')
+  assert.equal(continuationPrompt({ ...base, wasMidTurnAtShutdown: true, reason: 'tool-call-unanswered' }), 'continue')
+  assert.equal(continuationPrompt({ ...base, wasMidTurnAtShutdown: true, reason: 'no-reply' }), 'continue')
+})
+
+test('an interrupted-looking file with no shutdown record is not continued', () => {
+  // THE POINT OF THE RECORD: a turn the app's own quit cut short and one the user
+  // stopped on purpose both end on an unanswered tool call, so the file cannot
+  // tell them apart. Without the record the app would guess, and a guess that is
+  // wrong types a prompt into a conversation the user deliberately finished.
+  assert.equal(
+    continuationPrompt({ enabled: true, prompt: 'continue', alreadyHandled: false, wasMidTurnAtShutdown: false, reason: 'tool-call-unanswered' }),
+    null,
+  )
+  assert.equal(
+    continuationPrompt({ enabled: true, prompt: 'continue', alreadyHandled: false, wasMidTurnAtShutdown: false, reason: 'no-reply' }),
+    null,
+  )
 })
 
 test('nothing is sent once the session has been handled, so a second open is silent', () => {
   // A start or a workspace switch reopens the same session; without this the
   // user would get the continuation prompt twice.
-  assert.equal(continuationPrompt({ enabled: true, prompt: 'continue', alreadyHandled: true, reason: 'tool-call-unanswered' }), null)
+  assert.equal(continuationPrompt({ enabled: true, prompt: 'continue', alreadyHandled: true, wasMidTurnAtShutdown: true, reason: 'tool-call-unanswered' }), null)
 })
 
 test('nothing is sent when the feature is off or the turn finished', () => {
-  assert.equal(continuationPrompt({ enabled: false, prompt: 'continue', alreadyHandled: false, reason: 'tool-call-unanswered' }), null)
-  assert.equal(continuationPrompt({ enabled: true, prompt: 'continue', alreadyHandled: false, reason: null }), null)
+  assert.equal(continuationPrompt({ enabled: false, prompt: 'continue', alreadyHandled: false, wasMidTurnAtShutdown: true, reason: 'tool-call-unanswered' }), null)
+  assert.equal(continuationPrompt({ enabled: true, prompt: 'continue', alreadyHandled: false, wasMidTurnAtShutdown: true, reason: null }), null)
 })
 
 test('an empty or whitespace prompt sends nothing rather than an empty message', () => {
-  assert.equal(continuationPrompt({ enabled: true, prompt: '', alreadyHandled: false, reason: 'no-reply' }), null)
-  assert.equal(continuationPrompt({ enabled: true, prompt: '   ', alreadyHandled: false, reason: 'no-reply' }), null)
-  assert.equal(continuationPrompt({ enabled: true, prompt: undefined, alreadyHandled: false, reason: 'no-reply' }), null)
+  assert.equal(continuationPrompt({ enabled: true, prompt: '', alreadyHandled: false, wasMidTurnAtShutdown: true, reason: 'no-reply' }), null)
+  assert.equal(continuationPrompt({ enabled: true, prompt: '   ', alreadyHandled: false, wasMidTurnAtShutdown: true, reason: 'no-reply' }), null)
+  assert.equal(continuationPrompt({ enabled: true, prompt: undefined, alreadyHandled: false, wasMidTurnAtShutdown: true, reason: 'no-reply' }), null)
 })
 
 test('a custom prompt is sent trimmed', () => {
-  assert.equal(continuationPrompt({ enabled: true, prompt: '  keep going  ', alreadyHandled: false, reason: 'no-reply' }), 'keep going')
+  assert.equal(continuationPrompt({ enabled: true, prompt: '  keep going  ', alreadyHandled: false, wasMidTurnAtShutdown: true, reason: 'no-reply' }), 'keep going')
 })
 
 test('a tool that finished with no answer after it is an interruption', () => {

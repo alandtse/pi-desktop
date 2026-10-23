@@ -1068,11 +1068,35 @@ async function continueInterruptedTurn(
     console.warn('[continuation] interruption probe failed', err)
     return
   }
+  // The deciding fact is the record the closing app left, not an inference from
+  // the file: a turn the app's own quit cut short and one the user stopped both
+  // end on an unanswered tool call, so the file alone cannot tell them apart.
+  // The reason still gates it, because the file is the authority on whether
+  // anything is left to resume.
+  let wasMidTurn: boolean
+  try {
+    wasMidTurn = await window.piDesktop.session.wasMidTurnAtShutdown(sessionPath)
+  } catch (err) {
+    console.warn('[continuation] could not read the shutdown record', err)
+    return
+  }
+  // Cleared as soon as it is read: the record describes ONE quit, and leaving it
+  // in place would offer the same continuation again on every later start.
+  try {
+    await window.piDesktop.session.clearShutdownMarker()
+  } catch (err) {
+    console.warn('[continuation] could not clear the shutdown record', err)
+  }
+  if (!wasMidTurn) {
+    console.info('[continuation] not continued: the previous run did not close mid-turn')
+    return
+  }
   const prompt = continuationPrompt({
     reason,
     enabled: Boolean(settings?.resumeInterruptedTurn),
     prompt: settings?.resumeInterruptedTurnPrompt,
     alreadyHandled: false,
+    wasMidTurnAtShutdown: wasMidTurn,
   })
   // The prompt belongs to the CHAT it was decided for. A workspace is not a
   // chat: starting a new session, or opening another one, keeps the same

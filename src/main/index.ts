@@ -8,6 +8,8 @@ import { isBlockedPreviewRequest, previewGuestPreferences } from './preview-gues
 import { WorkspaceManager } from './workspace-manager'
 import type { WorkspaceTerminals } from './workspace-terminals'
 import { registerIpcHandlers, loadAppSettings, saveAppSettings } from './ipc-handlers'
+import { recordMidTurnSync } from './ipc/shutdown-turns-handlers'
+import type { TurnTracker } from './turn-tracker'
 import type { RelaySessionBridge } from './relay/relay-bridge'
 import { setPiExecutableOverride, cleanupPiChildTempDir } from './pi-rpc-manager'
 import { applyLanguageSetting } from './i18n'
@@ -78,6 +80,8 @@ function getAppIconPath(): string {
 let workspaceManager: WorkspaceManager | null = null
 let workspaceTerminals: WorkspaceTerminals | null = null
 let relayBridge: RelaySessionBridge | null = null
+/** Live mid-turn record, read by the quit path. */
+let turnTracker: TurnTracker | null = null
 
 // The single main window, tracked so the tray, single-instance relaunch, and
 // macOS dock-activate can all bring it back. `isQuitting` distinguishes a real
@@ -86,6 +90,25 @@ let mainWindow: BrowserWindow | null = null
 let isQuitting = false
 let shutdownPending: Promise<void> | null = null
 let shutdownComplete = false
+/**
+ * True once the mid-turn record has been written for this quit.
+ *
+ * `will-quit` runs again after shutdown so the quit can resume; without this the
+ * second pass would write an empty record over the one that matters.
+ */
+let recordedMidTurn = false
+
+/**
+ * Writes the mid-turn record, synchronously and exactly once per quit.
+ *
+ * Synchronous because it must land before the quit finishes and before the
+ * managers are stopped by the drain below — the same reason the stats and log
+ * flushes on this path are synchronous.
+ */
+function recordMidTurnOnce(): void {
+  recordedMidTurn = true
+  if (turnTracker) recordMidTurnSync(turnTracker)
+}
 
 // Guards the renderer's unsaved editor buffer against teardown. The renderer
 // mirrors its dirty flag here (ui:editor-dirty-set); quit, non-tray window
@@ -504,6 +527,7 @@ app.whenReady().then(async () => {
   }, getAppIconPath())
   workspaceTerminals = ipc.terminals
   relayBridge = ipc.relay
+  turnTracker = ipc.turnTracker
   // The relay only dials when a url and keypair are already stored, so this is
   // a no-op on a default install.
   void ipc.relay.start()
@@ -580,6 +604,10 @@ app.on('before-quit', (event) => {
 // Close the renderer before tearing down the services it can still query.
 app.on('will-quit', (event) => {
   if (!shutdownComplete) {
+    // Recorded once, BEFORE the managers are stopped: stopping them ends their
+    // turns, and this handler runs a second time after shutdown completes, when
+    // the tracker is empty and a second write would erase the record.
+    if (!recordedMidTurn) recordMidTurnOnce()
     event.preventDefault()
     // The executor turns a synchronous stopAll() throw into a rejection, so a
     // failed teardown is logged and the quit still resumes instead of hanging.

@@ -66,7 +66,7 @@ test('a session that has not loaded yet is not the chat a prompt was meant for',
 test('an interrupted turn asks for a continuation and a finished one does not', () => {
   // The gate that decides whether anything is sent at all.
   // The shipped default, which is what the app actually sends.
-  const base = { enabled: true, prompt: DEFAULT_SETTINGS.resumeInterruptedTurnPrompt, alreadyHandled: false }
+  const base = { enabled: true, prompt: DEFAULT_SETTINGS.resumeInterruptedTurnPrompt, alreadyHandled: false, wasMidTurnAtShutdown: true }
   assert.match(String(continuationPrompt({ ...base, reason: 'tool-call-unanswered' })), /continue/i)
   assert.equal(continuationPrompt({ ...base, reason: null }), null)
   // Each interrupted reason the classifier can report offers a continuation.

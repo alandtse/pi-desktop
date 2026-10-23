@@ -1,4 +1,5 @@
 import type { PiRpcManager } from './pi-rpc-manager'
+import type { TurnTracker } from './turn-tracker'
 import type {
   PendingPromptCounts,
   PiAgentEndEvent,
@@ -48,6 +49,10 @@ export interface PiEventRouterDeps {
   broadcastEvent(event: PiRpcEvent): void
   /** Push a fresh pending-prompt snapshot to the renderer (EVENT_PENDING_PROMPTS). */
   broadcastPendingCounts(counts: PendingPromptCounts): void
+  /** Resolve one manager's session file, for the mid-turn record. */
+  sessionPathFor?(manager: PiRpcManager): string | null
+  /** Observe turn boundaries so a quit can record which chats were working. */
+  turnTracker?: TurnTracker
   now(): number
 }
 
@@ -186,6 +191,9 @@ export function createPiEventRouter(deps: PiEventRouterDeps): PiEventRouter {
   ])
 
   const handleManagerEvent = (manager: PiRpcManager, event: PiRpcEvent): void => {
+    // Observed before any routing decision: a background chat's turn boundaries
+    // are exactly the ones this must not miss.
+    deps.turnTracker?.observe(event, deps.sessionPathFor?.(manager) ?? null)
     if (isBlockingDialog(event)) {
       handleBlockingDialog(manager, event)
       return
@@ -247,7 +255,10 @@ export function createPiEventRouter(deps: PiEventRouterDeps): PiEventRouter {
         deps.broadcastEvent({ type: 'status_change', ...manager.getStatus() })
       }
     })
-    manager.on('exit', () => evictManager(manager))
+    manager.on('exit', () => {
+      deps.turnTracker?.forget(deps.sessionPathFor?.(manager) ?? null)
+      evictManager(manager)
+    })
   }
 
   const respond = (id: string, response: Record<string, unknown>): void => {

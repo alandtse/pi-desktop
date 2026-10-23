@@ -30,10 +30,13 @@ import { registerTypeSafeHandlers } from './ipc/typesafe-handlers'
 import { registerWorkflowHandlers } from './ipc/workflow-handlers'
 import { registerSubagentHandlers } from './ipc/subagent-handlers'
 import { registerRelayHandlers } from './ipc/relay-handlers'
+import { registerShutdownTurnsHandler } from './ipc/shutdown-turns-handlers'
+import { createTurnTracker } from './turn-tracker'
 import { createRelayBridge } from './relay/relay-wiring'
 import type { RelaySessionBridge } from './relay/relay-bridge'
 import { wireWorkspaceActivity, type WindowControls } from './ipc/workspace-activity-wiring'
 import type { WorkspaceTerminals } from './workspace-terminals'
+import type { TurnTracker } from './turn-tracker'
 
 export { loadAppSettings, saveAppSettings } from './ipc/settings'
 
@@ -48,8 +51,11 @@ export function registerIpcHandlers(
   workspaceManager: WorkspaceManager,
   windowControls: WindowControls = { getWindow: () => null, showWindow: () => {} },
   iconPath = '',
-): { terminals: WorkspaceTerminals; relay: RelaySessionBridge } {
+): { terminals: WorkspaceTerminals; relay: RelaySessionBridge; turnTracker: TurnTracker } {
   const ctx = createIpcContext(workspaceManager)
+  // Fed by the router and read by the quit path; see turn-tracker.ts for why a
+  // live record beats inferring an interruption from the session file.
+  const turnTracker = createTurnTracker()
 
   // Session runtime snapshots are separate from workspace activity: several
   // live Pi processes may share one project cwd.
@@ -108,6 +114,7 @@ export function registerIpcHandlers(
       workspace: workspaceManager,
       broadcast: ctx.broadcast,
       onPendingCounts: (counts) => workspaceActivity.handlePendingCounts(counts),
+      turnTracker,
     }),
     workspace: workspaceManager,
     broadcast: ctx.broadcast,
@@ -120,5 +127,7 @@ export function registerIpcHandlers(
     ctx.broadcast(IPC_CHANNELS.EVENT_FILE_CHANGE, event)
   })
 
-  return { terminals: ctx.terminalService, relay }
+  registerShutdownTurnsHandler(workspaceManager, turnTracker)
+
+  return { terminals: ctx.terminalService, relay, turnTracker }
 }

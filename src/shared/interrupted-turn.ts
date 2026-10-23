@@ -102,9 +102,19 @@ export function continuationPrompt(options: {
   enabled: boolean
   prompt: string | undefined
   alreadyHandled: boolean
+  /**
+   * Whether the closing app recorded this chat as mid-turn.
+   *
+   * A turn the app's own quit cut short and one the user deliberately stopped
+   * both end on an unanswered tool call, so the session file cannot tell them
+   * apart. The record is what makes this a fact rather than a guess, and it is
+   * required: an interrupted-looking file with no record is not continued.
+   */
+  wasMidTurnAtShutdown: boolean
 }): string | null {
   if (options.alreadyHandled) return null
   if (!options.enabled) return null
+  if (!options.wasMidTurnAtShutdown) return null
   if (!options.reason) return null
   const prompt = options.prompt?.trim()
   // An empty prompt would send an empty message, which the engine rejects.

@@ -2740,6 +2740,7 @@ test('a stop by the user asks for no continuation at all', () => {
       enabled: true,
       prompt: 'continue',
       alreadyHandled: false,
+      wasMidTurnAtShutdown: true,
     }),
     null,
   )

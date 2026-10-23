@@ -90,6 +90,7 @@ function createHarness(): Harness {
   const workspace: ExtensionUiWorkspace = {
     getActivePiManager: () => activePi,
     workspaceIdFor: () => null,
+    sessionPathFor: () => null,
     onPiManager: (listener) => managerListeners.push(listener),
     onActiveWorkspaceChanged: (listener) => activeListeners.push(() => listener(null)),
   }
@@ -253,6 +254,7 @@ function createRouterHarness(workspaceIds: string[]): RouterHarness {
       }
       return null
     },
+    sessionPathFor: () => null,
     onPiManager: () => {},
     onActiveWorkspaceChanged: () => {},
   }

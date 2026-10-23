@@ -1,5 +1,6 @@
 import { IPC_CHANNELS, type PendingPromptCounts } from '../shared/ipc-contracts'
 import { createPiEventRouter, type PiEventRouter } from './pi-event-router'
+import type { TurnTracker } from './turn-tracker'
 import type { PiRpcManager } from './pi-rpc-manager'
 
 /**
@@ -24,6 +25,8 @@ export type IpcInvokeRegistrar<TEvent> = (
 export interface ExtensionUiWorkspace {
   getActivePiManager(): PiRpcManager | null
   workspaceIdFor(manager: PiRpcManager): string | null
+  /** The session file a manager is running, or null when it runs none. */
+  sessionPathFor(manager: PiRpcManager): string | null
   onPiManager(listener: (manager: PiRpcManager) => void): void
   onActiveWorkspaceChanged(listener: (workspaceId: string | null) => void): void
 }
@@ -50,6 +53,8 @@ export function createExtensionUiRouter(deps: {
   broadcast: ChannelBroadcast
   /** Optional main-side observer of pending-count changes (activity tracker). */
   onPendingCounts?: (counts: PendingPromptCounts) => void
+  /** Optional mid-turn record, so a quit knows which chats were working. */
+  turnTracker?: TurnTracker
 }): PiEventRouter {
   return createPiEventRouter({
     getActiveManager: () => deps.workspace.getActivePiManager(),
@@ -59,6 +64,8 @@ export function createExtensionUiRouter(deps: {
       deps.onPendingCounts?.(counts)
       deps.broadcast(IPC_CHANNELS.EVENT_PENDING_PROMPTS, counts)
     },
+    sessionPathFor: (manager) => deps.workspace.sessionPathFor(manager),
+    turnTracker: deps.turnTracker,
     now: () => Date.now(),
   })
 }

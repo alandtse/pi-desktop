@@ -38,6 +38,10 @@ export const IPC_CHANNELS = {
   SESSION_RESUME_TARGET: 'session:resume-target',
   // Why the session returned by SESSION_RESUME_TARGET ended unfinished, if it did.
   SESSION_INTERRUPTION: 'session:interruption',
+  /** True when the previous run closed while this chat was mid-turn. */
+  SESSION_WAS_MID_TURN_AT_SHUTDOWN: 'session:was-mid-turn-at-shutdown',
+  /** Drops the record once startup has acted on it. */
+  SESSION_CLEAR_SHUTDOWN_MARKER: 'session:clear-shutdown-marker',
   SESSION_GET_STATE: 'session:get-state',
   SESSION_GET_MESSAGES: 'session:get-messages',
   SESSION_GET_STATS: 'session:get-stats',
