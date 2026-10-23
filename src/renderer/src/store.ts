@@ -2430,9 +2430,10 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
     try {
       rows = await window.piDesktop.relay.sessions()
     } catch {
-      // An unpaired or unreachable Pi contributes no rows, and that must not
-      // strip the local list; only the previously fetched remote rows drop out.
-      rows = []
+      // A failed refresh must not erase rows the user can see. The relay drops a
+      // repeated `rooms_check` reply, so a transient timeout here is normal and
+      // says nothing about the sessions still running on the paired Pi.
+      return
     }
     const remote = rows.map((row) => row.session)
     set((state) => ({

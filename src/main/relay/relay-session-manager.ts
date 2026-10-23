@@ -241,20 +241,23 @@ export class RelaySessionManager extends EventEmitter {
     const target = this.requirePaired()
     await this.ensureConnected()
 
-    // `subscribeToRoster` already asked for the roster when the connection came
-    // up, and the relay suppresses a second identical answer per connection. A
-    // reply that has already landed therefore IS the answer to this question:
-    // spending it and asking again would wait for a frame the relay intends not
-    // to send. Only a connection that has not answered yet costs a fresh ask.
+    // The relay dedups a `rooms_check` reply per (connection, peer): the first
+    // answer is always sent and every identical snapshot after it is dropped. So
+    // once THIS connection has answered, no further request can ever be answered
+    // and waiting for one would time out on a roster we already hold. The flag is
+    // therefore "this connection has a roster", not "a reply is waiting to be
+    // read" — it is cleared on reconnect, where the next check is answered again.
+    // Room starts and ends arrive as their own frames, so the held list stays
+    // current without another snapshot.
     if (this.rosterReplies.has(target.peer)) {
-      this.rosterReplies.delete(target.peer)
       return this.getState().rooms
     }
-
-    this.rosterRequests.add(target.peer)
-    if (!this.options.transport.sendControl({ type: 'rooms_check', peers: [target.peer] })) {
-      this.rosterRequests.delete(target.peer)
-      throw new Error('The relay connection is not open')
+    if (!this.rosterRequests.has(target.peer)) {
+      this.rosterRequests.add(target.peer)
+      if (!this.options.transport.sendControl({ type: 'rooms_check', peers: [target.peer] })) {
+        this.rosterRequests.delete(target.peer)
+        throw new Error('The relay connection is not open')
+      }
     }
 
     await this.waitForRoster(target.peer)
