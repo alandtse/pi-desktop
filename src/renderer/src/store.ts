@@ -795,6 +795,39 @@ const REMOTE_SAFE_EVENTS: ReadonlySet<string> = new Set([
 
 let sessionLoadGeneration = 0
 let historyLoadId = 0
+
+/**
+ * Transcripts of sessions this app has already loaded, so cycling tabs does not
+ * refetch a conversation the Pi has not changed.
+ *
+ * Cache entries are dropped when the session is written to (see
+ * invalidateSessionTranscript), so a cached entry can only be stale for a
+ * session whose Pi produced turns while it was off screen — which the live event
+ * stream covers for the session in view and cannot cover for one it is not.
+ * Bounded so a long run of distinct sessions does not keep every transcript.
+ */
+const MAX_CACHED_TRANSCRIPTS = 8
+interface CachedTranscript {
+  messages: DisplayMessage[]
+  /** Message count the Pi reported; a mismatch means the cache is behind. */
+  total: number
+}
+const transcriptCache = new Map<string, CachedTranscript>()
+
+function cacheTranscript(sessionPath: string, entry: CachedTranscript): void {
+  // Re-inserting moves the key to the end, making eviction least-recently-used.
+  transcriptCache.delete(sessionPath)
+  transcriptCache.set(sessionPath, entry)
+  while (transcriptCache.size > MAX_CACHED_TRANSCRIPTS) {
+    const oldest = transcriptCache.keys().next()
+    if (oldest.done) break
+    transcriptCache.delete(oldest.value)
+  }
+}
+
+function invalidateSessionTranscript(sessionPath: string | null | undefined): void {
+  if (sessionPath) transcriptCache.delete(sessionPath)
+}
 let sessionStateRequestId = 0
 let historyLoadingRuntime: string | null = null
 
@@ -2225,6 +2258,14 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
     const loadId = ++historyLoadId
     const runtimeId = get().activeSessionRuntimeId
     const workspaceId = get().activeWorkspace?.id
+    // Paint the transcript we already have before asking for it again: a tab
+    // being cycled back to has almost always not changed, and waiting on the
+    // round-trip is what made switching feel slow.
+    const currentSessionFile = get().sessionState?.sessionFile
+    const cached = currentSessionFile ? transcriptCache.get(currentSessionFile) : undefined
+    if (cached && cached.messages.length > 0 && get().messages.length === 0) {
+      set({ messages: cached.messages })
+    }
     const messagesAtStart = get().messages
     historyLoadingRuntime = runtimeId
     const isCurrent = (): boolean => loadId === historyLoadId && gen === sessionLoadGeneration &&
@@ -2289,13 +2330,13 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
           })
           // Back in a turn that is still running: its unanswered tools are running.
           const reattached = get().isStreaming && get().reattachedMidTurn
-          set({
-            messages: withPromptRefusal(
-              reattached ? markUnansweredToolCallsRunning(messages) : messages,
-              runtimeId ? get().sessionRuntimes[runtimeId] : undefined
-            ),
-            sessionLoading: false,
-          })
+          const finalMessages = withPromptRefusal(
+            reattached ? markUnansweredToolCallsRunning(messages) : messages,
+            runtimeId ? get().sessionRuntimes[runtimeId] : undefined
+          )
+          const sessionFile = get().sessionState?.sessionFile
+          if (sessionFile) cacheTranscript(sessionFile, { messages: finalMessages, total })
+          set({ messages: finalMessages, sessionLoading: false })
         } else {
           set({ sessionLoading: false })
         }
@@ -2939,6 +2980,10 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
         // Tool results and user echoes do not finish the assistant stream.
         // In particular, other tools may still be executing in parallel.
         if (endedMessage?.role !== 'assistant') break
+        // The transcript just changed, so the cached copy of THIS session is
+        // behind. Dropped here rather than on switch so a tab cycled back to
+        // refetches instead of showing a conversation missing its last turn.
+        invalidateSessionTranscript(get().sessionState?.sessionFile)
         handleTurnComplete(set, endedMessage, false)
         // turn_end re-delivers the same message, so errors surface only here.
         const turnError = turnErrorText(endedMessage)

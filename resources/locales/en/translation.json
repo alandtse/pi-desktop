@@ -61,6 +61,7 @@
     "emptyState": {
       "chooseProject": "Choose a project — {{agent}} starts when you send.",
       "pickProject": "Pick a project and describe what you want done.",
+      "remoteEmpty": "No messages in this session yet. Type below to start one.",
       "startFailed": "Failed to start {{agent}}. Check settings.",
       "starting": "Starting {{agent}} agent…",
       "title": "What should {{agent}} work on?",
@@ -82,6 +83,7 @@
       "ariaLabel": "Insert note",
       "titleWithShortcut": "Insert note (Ctrl+Shift+P)"
     },
+    "loadingRemoteSession": "Loading the session on the other machine…",
     "loadingSession": "Loading session…",
     "mentionPopup": {
       "insertHint": "↑↓ navigate · Enter/Tab insert path · Esc close"

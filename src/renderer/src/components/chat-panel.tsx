@@ -39,7 +39,7 @@ import { useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { clsx } from 'clsx'
 import piLogo from '../assets/pi-logo.svg'
-import { X, ChevronDown, Loader2 } from 'lucide-react'
+import { X, ChevronDown, Loader2, Laptop } from 'lucide-react'
 
 // Fallback padding when the composer has not measured yet (~idle pill + gradient).
 const DEFAULT_COMPOSER_PAD_PX = 144
@@ -58,6 +58,10 @@ export function ChatPanel(): React.JSX.Element {
   const { t } = useTranslation()
   const messages = useAppStore((state) => state.messages)
   const sessionLoading = useAppStore((state) => state.sessionLoading)
+  // A remote session is a real chat even when its transcript is still empty:
+  // the project picker is for starting work on THIS machine, so showing it over
+  // a remote session reads as "nothing opened".
+  const activeRemoteRef = useAppStore((state) => state.activeRemoteRef)
   const isStreaming = useAppStore((state) => state.isStreaming)
   const reattachedMidTurn = useAppStore((state) => state.reattachedMidTurn)
   // Drive message-list bottom padding from the real floating composer height so
@@ -300,7 +304,7 @@ export function ChatPanel(): React.JSX.Element {
             )}
             {(() => {
               const isEmptyChat =
-                !sessionLoading && messages.length === 0 && !isStreaming
+                !activeRemoteRef && !sessionLoading && messages.length === 0 && !isStreaming
 
               // Empty session: Codex-style center prompt + project picker (sidebar chrome).
               if (isEmptyChat) {
@@ -360,7 +364,15 @@ export function ChatPanel(): React.JSX.Element {
                     {sessionLoading && messages.length === 0 && !isStreaming ? (
                       <div className="flex h-full flex-col items-center justify-center gap-2 text-sm text-dim">
                         <div className="h-5 w-5 animate-spin rounded-full border-2 border-border-strong border-t-accent" />
-                        {piStatus === 'running' ? t('chat.loadingSession') : t('chat.startingAgent')}
+                        {activeRemoteRef ? t('chat.loadingRemoteSession') : piStatus === 'running' ? t('chat.loadingSession') : t('chat.startingAgent')}
+                      </div>
+                    ) : activeRemoteRef && messages.length === 0 && !isStreaming ? (
+                      // A remote session with nothing in it is still a session: say so
+                      // rather than falling through to an empty transcript with no
+                      // explanation of why nothing loaded.
+                      <div className="flex h-full flex-col items-center justify-center gap-2 px-6 text-center text-sm text-dim">
+                        <Laptop size={18} className="text-faint" />
+                        {t('chat.emptyState.remoteEmpty')}
                       </div>
                     ) : (
                       <NowContext.Provider value={now}>

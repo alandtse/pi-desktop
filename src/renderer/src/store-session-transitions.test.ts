@@ -49,6 +49,11 @@ let sessionStateResult: SessionState | null = null
 const resumeTargetResult: string | null = null
 // Runs inside the stubbed session.switch, i.e. while the resume is still in flight.
 let switchHook: (() => void) | null = null
+// Gates the stubbed getMessages so a test can observe what is on screen while a
+// refresh is still in flight.
+let getMessagesGate: (() => Promise<void>) | null = null
+// What the stubbed getMessages reports as the session's history.
+let getMessagesResult: unknown[] = []
 // The interruption reason the stub reports for a resumed session.
 let interruptionReason: 'tool-call-unanswered' | 'no-reply' | null = null
 // What the stubbed session.delete reports. `replacementSessionPath` mirrors
@@ -264,7 +269,8 @@ const piDesktopStub = {
     },
     getMessages: async () => {
       calls.push('getMessages')
-      return { success: true, data: { messages: [] } }
+      if (getMessagesGate) await getMessagesGate()
+      return { success: true, data: { messages: getMessagesResult } }
     },
     getState: async () => ({ success: true, data: sessionStateResult }),
     getStats: async () => ({ success: true, data: null }),
@@ -360,6 +366,8 @@ beforeEach(() => {
   switchHook = null
   sessionDeleteResult = { ok: true, method: 'trash', replacementSessionPath: null }
   forkMessagesResult = []
+  getMessagesGate = null
+  getMessagesResult = []
   useAppStore.setState({
     isStreaming: false,
     streamingContent: '',
@@ -2734,4 +2742,95 @@ test('a stop by the user asks for no continuation at all', () => {
     }),
     null,
   )
+})
+
+test('cycling back to a session paints it without waiting for the round-trip', async () => {
+  // Switching tabs refetched get_messages every time, so returning to a chat
+  // that had not changed still paid a full round-trip and re-parse. The second
+  // visit must show the transcript from cache while the refresh runs.
+  const workspace = {
+    id: 'ws-cache',
+    name: 'Cache',
+    path: '/tmp/workspace-cache',
+    createdAt: 0,
+    lastActiveAt: 0,
+    color: '#000',
+  }
+  const pathA = '/tmp/session-a.jsonl'
+  const pathB = '/tmp/session-b-cache.jsonl'
+
+  activeWorkspaceResult = workspace
+  sessionStateResult = resumedSessionState(pathA)
+  getMessagesResult = [{ role: 'user', content: [{ type: 'text', text: 'first session text' }], timestamp: 1 }]
+  useAppStore.setState({
+    activeWorkspace: workspace,
+    workspaces: [workspace],
+    piStatus: 'running',
+    sessionState: resumedSessionState(pathA),
+    activeSessionRuntimeId: 'runtime-cache',
+    messages: [],
+  })
+  // First load populates the cache. No gate: this one is allowed to finish.
+  await useAppStore.getState().reloadActiveSession({ refreshList: false })
+
+  // Move to B so the cache holds A and the view holds B.
+  sessionStateResult = resumedSessionState(pathB)
+  useAppStore.setState({ sessionState: resumedSessionState(pathB), activeSessionRuntimeId: 'runtime-cache-b', messages: [] })
+  await useAppStore.getState().reloadActiveSession({ refreshList: false })
+
+  // Return to A with the refresh held open: the transcript on screen can only
+  // come from the cache, since nothing has answered yet.
+  let releaseRefresh = () => {}
+  getMessagesGate = () => new Promise<void>((resolve) => { releaseRefresh = resolve })
+  sessionStateResult = resumedSessionState(pathA)
+  useAppStore.setState({ sessionState: resumedSessionState(pathA), activeSessionRuntimeId: 'runtime-cache', messages: [] })
+  void useAppStore.getState().reloadActiveSession({ refreshList: false })
+  const painted = useAppStore.getState().messages
+  console.log('DBG painted', painted.length, 'messagesAtSet', useAppStore.getState().sessionLoading)
+  releaseRefresh()
+  assert.ok(painted.length > 0, 'the cached transcript is shown before the refresh answers')
+})
+
+test('a turn in a session drops its cached transcript', async () => {
+  // A cache that outlived a new turn would show a conversation missing its last
+  // answer when the tab was revisited, so a finished turn must drop it.
+  const workspace = {
+    id: 'ws-cache-invalidate',
+    name: 'Invalidate',
+    path: '/tmp/workspace-cache-invalidate',
+    createdAt: 0,
+    lastActiveAt: 0,
+    color: '#000',
+  }
+  const sessionPath = '/tmp/session-invalidate.jsonl'
+  activeWorkspaceResult = workspace
+  sessionStateResult = resumedSessionState(sessionPath)
+  getMessagesResult = [{ role: 'user', content: [{ type: 'text', text: 'hello' }], timestamp: 1 }]
+  useAppStore.setState({
+    activeWorkspace: workspace,
+    workspaces: [workspace],
+    piStatus: 'running',
+    sessionState: resumedSessionState(sessionPath),
+    activeSessionRuntimeId: 'runtime-invalidate',
+    // A local session: a remote one would filter the turn event out.
+    activeRemoteRef: null,
+    messages: [],
+  })
+  await useAppStore.getState().reloadActiveSession({ refreshList: false })
+  assert.ok(useAppStore.getState().messages.length > 0, 'the first load populated the cache')
+
+  // A finished assistant turn invalidates the copy taken above.
+  useAppStore.getState().handlePiEvent({
+    type: 'message_end',
+    message: { role: 'assistant', content: [{ type: 'text', text: 'hi' }], stopReason: 'stop' },
+  } as unknown as PiRpcEvent)
+
+  // Revisit with the refresh held open: nothing may paint from the dropped entry.
+  let releaseRefresh = () => {}
+  getMessagesGate = () => new Promise<void>((resolve) => { releaseRefresh = resolve })
+  useAppStore.setState({ messages: [] })
+  void useAppStore.getState().reloadActiveSession({ refreshList: false })
+  const painted = useAppStore.getState().messages
+  releaseRefresh()
+  assert.equal(painted.length, 0, 'the stale cached transcript was not reused')
 })

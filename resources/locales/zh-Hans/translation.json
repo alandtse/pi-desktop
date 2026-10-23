@@ -61,6 +61,7 @@
     "emptyState": {
       "chooseProject": "选择一个项目 — 发送消息后 {{agent}} 即会启动。",
       "pickProject": "选择一个项目，并描述你想要完成的内容。",
+      "remoteEmpty": "此会话还没有消息。在下方输入以开始。",
       "startFailed": "启动 {{agent}} 失败。请检查设置。",
       "starting": "正在启动 {{agent}} 智能体…",
       "title": "要让 {{agent}} 处理什么？",
@@ -82,6 +83,7 @@
       "ariaLabel": "插入笔记",
       "titleWithShortcut": "插入笔记（Ctrl+Shift+P）"
     },
+    "loadingRemoteSession": "正在加载另一台机器上的会话…",
     "loadingSession": "正在加载会话…",
     "mentionPopup": {
       "insertHint": "↑↓ 选择 · Enter/Tab 插入路径 · Esc 关闭"
