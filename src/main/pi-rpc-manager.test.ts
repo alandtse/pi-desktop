@@ -99,6 +99,25 @@ test('remembered reasoning never overrides a resumed or forked session', () => {
   }
 })
 
+test('a resumed session starts with its own model, not the app default', () => {
+  // Pi restores a resuming session's model from its last model_change entry, but
+  // only when --model is absent. Passing the app's remembered default overrode
+  // that, so picking a model in one chat retuned every other chat on next start.
+  for (const binding of [
+    { sessionPath: '/sessions/existing.jsonl' },
+    { forkSessionPath: '/sessions/parent.jsonl' },
+    { continueSession: true },
+  ]) {
+    const args = buildPiArgs({ provider: 'ollama-cloud', model: 'deepseek-v4.1-flash', ...binding })
+    assert.equal(args.includes('--model'), false, `model must not be forced: ${JSON.stringify(binding)}`)
+    assert.equal(args.includes('--provider'), false, `provider must not be forced: ${JSON.stringify(binding)}`)
+  }
+  // A new session still gets both, which is what makes the default meaningful.
+  const fresh = buildPiArgs({ provider: 'ollama-cloud', model: 'deepseek-v4.1-flash' })
+  assert.ok(fresh.includes('--model'))
+  assert.ok(fresh.includes('--provider'))
+})
+
 test('explicit thinking arguments override the saved preference', () => {
   for (const args of [['--thinking', 'low'], ['--thinking=low']]) {
     assert.deepEqual(buildPiArgs({ defaultThinkingLevel: 'high', args }), ['--mode', 'rpc', ...args])

@@ -559,11 +559,19 @@ export function buildPiArgs(options: PiStartOptions): string[] {
     args.push(NO_SESSION_FLAG)
   }
 
-  if (options.provider) {
+  // The model is only passed for a NEW session. Pi restores a resuming session's
+  // own model from its last `model_change` entry, but only when --model is absent
+  // (core agent: `if (!model && hasExistingSession && sessionModel)`). Passing the
+  // app's default here overrode that, so switching model in one chat silently
+  // retuned every other chat the next time it started: the picker read the
+  // per-session value while the startup argument came from the global default.
+  const resumesExistingSession = Boolean(options.sessionPath || options.forkSessionPath || options.continueSession)
+
+  if (options.provider && !resumesExistingSession) {
     args.push(PROVIDER_FLAG, options.provider)
   }
 
-  if (options.model) {
+  if (options.model && !resumesExistingSession) {
     args.push(MODEL_FLAG, options.model)
   }
 

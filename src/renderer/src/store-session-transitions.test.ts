@@ -11,6 +11,8 @@ import type {
   Workspace,
   RemoteSessionRef,
 } from '../../shared/ipc-contracts'
+import { continuationPrompt } from '../../shared/interrupted-turn'
+import { isSameSessionShown } from './store'
 import type { PreviewTarget } from './store'
 
 // Each recorded call is appended to `calls`, so tests can assert both that a
@@ -41,6 +43,14 @@ let fileSearchResults: Array<{
 let fileSearchHook: (() => void) | null = null
 // What the stubbed session.getState returns as data (null = no state).
 let sessionStateResult: SessionState | null = null
+// What the stubbed interruption probe reports for a resumed session. Only the
+// continuation tests set this; the default is a finished turn, which asks for no
+// prompt at all.
+const resumeTargetResult: string | null = null
+// Runs inside the stubbed session.switch, i.e. while the resume is still in flight.
+let switchHook: (() => void) | null = null
+// The interruption reason the stub reports for a resumed session.
+let interruptionReason: 'tool-call-unanswered' | 'no-reply' | null = null
 // What the stubbed session.delete reports. `replacementSessionPath` mirrors
 // the runtime main promoted while closing the deleted session's tab.
 let sessionDeleteResult: SessionDeleteResult = { ok: true, method: 'trash', replacementSessionPath: null }
@@ -51,6 +61,10 @@ let forkMessagesResult: Array<{ entryId: string; text: string }> = []
 // fixture from churning as SessionState grows fields.
 function sessionStateWith(sessionFile: string): SessionState {
   return { sessionFile } as unknown as SessionState
+}
+
+function resumedSessionState(sessionFile: string): SessionState {
+  return { sessionFile, model: { provider: 'ollama-cloud', id: 'deepseek-v4.1-flash', name: 'Deepseek' } } as unknown as SessionState
 }
 
 const SESSION_PATH = '/tmp/session-b.jsonl'
@@ -220,6 +234,7 @@ const piDesktopStub = {
   session: {
     switch: async (path: string) => {
       calls.push(`switch:${path}`)
+      switchHook?.()
       return switchResult
     },
     createNew: async () => {
@@ -254,7 +269,11 @@ const piDesktopStub = {
     getState: async () => ({ success: true, data: sessionStateResult }),
     getStats: async () => ({ success: true, data: null }),
     list: async () => [],
-    resumeTarget: async () => null,
+    resumeTarget: async () => resumeTargetResult,
+    interruption: async (sessionPath: string) => {
+      calls.push(`interruption:${sessionPath}`)
+      return interruptionReason
+    },
   },
 }
 
@@ -337,6 +356,8 @@ beforeEach(() => {
   fileSearchResults = []
   fileSearchHook = null
   sessionStateResult = null
+  interruptionReason = null
+  switchHook = null
   sessionDeleteResult = { ok: true, method: 'trash', replacementSessionPath: null }
   forkMessagesResult = []
   useAppStore.setState({
@@ -2671,4 +2692,46 @@ test('status and session-name events still apply while a remote session is open'
   useAppStore.getState().handlePiEvent({ type: 'status_change', status: 'error' } as unknown as PiRpcEvent)
 
   assert.equal(useAppStore.getState().piStatus, 'error', 'local runtime status is not remote content')
+})
+
+// A workspace is not a chat: two sessions in one workspace are still two chats.
+// Resuming an interrupted session queues a continuation, and starting a new
+// session in that same workspace before it flushes used to satisfy the only
+// readiness check there was (workspace id), so the prompt was typed into the
+// fresh session instead of the one it was decided for.
+test('a chat is identified by its session, not by its workspace', () => {
+  // The bug this pins: continuation was gated on the WORKSPACE id, and two
+  // sessions in one workspace share it. Starting a new session right after
+  // launch therefore satisfied the gate and received a continuation decided for
+  // the session it replaced. Identity has to be the session file.
+  const workspace = { id: 'ws-one', name: 'One', path: '/tmp/one', createdAt: 0, lastActiveAt: 0, color: '#000' }
+  const resumed = '/tmp/session-resumed.jsonl'
+  const fresh = '/tmp/session-fresh.jsonl'
+
+  const onSameChat = { activeWorkspace: workspace, sessionState: resumedSessionState(resumed) }
+  const onOtherChat = { activeWorkspace: workspace, sessionState: resumedSessionState(fresh) }
+  const onNoChat = { activeWorkspace: workspace, sessionState: null }
+  const otherWorkspace = { activeWorkspace: { ...workspace, id: 'ws-two' }, sessionState: resumedSessionState(resumed) }
+
+  const call = (state: object): boolean =>
+    isSameSessionShown(state as Parameters<typeof isSameSessionShown>[0], resumed, workspace.id)
+
+  assert.equal(call(onSameChat), true, 'the resumed session on screen is the chat it was decided for')
+  assert.equal(call(onOtherChat), false, 'a different session in the same workspace is a different chat')
+  assert.equal(call(onNoChat), false, 'a chat that has not loaded yet is not yet the target')
+  assert.equal(call(otherWorkspace), false, 'another workspace is never the target')
+})
+
+test('a stop by the user asks for no continuation at all', () => {
+  // The app classifies a turn the user stopped as finished, so no prompt is
+  // decided for it and this session never reaches the send.
+  assert.equal(
+    continuationPrompt({
+      reason: null,
+      enabled: true,
+      prompt: 'continue',
+      alreadyHandled: false,
+    }),
+    null,
+  )
 })

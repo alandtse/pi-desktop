@@ -932,6 +932,23 @@ async function waitForSessionReady(
 }
 
 /**
+ * Whether the chat on screen is the one a continuation was decided for.
+ *
+ * Session identity, not workspace identity: two sessions in one workspace are
+ * still two chats. Compared against sessionState.sessionFile, which is the file the
+ * runtime reports for the session it has loaded — so a start that has not loaded
+ * yet reads as "not the same chat" and is retried rather than typed into blindly.
+ */
+export function isSameSessionShown(
+  state: AppState & AppActions,
+  sessionPath: string,
+  workspaceId: string,
+): boolean {
+  if (state.activeWorkspace?.id !== workspaceId) return false
+  return state.sessionState?.sessionFile === sessionPath
+}
+
+/**
  * Offers to carry on a resumed session whose last turn the app's own closing cut
  * short.
  *
@@ -966,9 +983,13 @@ async function continueInterruptedTurn(
     prompt: settings?.resumeInterruptedTurnPrompt,
     alreadyHandled: false,
   })
-  // The prompt belongs to the chat it was decided for: if the user has since
-  // opened another workspace, sending it here would type into the wrong session.
-  if (!prompt || get().activeWorkspace?.id !== workspaceId) return
+  // The prompt belongs to the CHAT it was decided for. A workspace is not a
+  // chat: starting a new session, or opening another one, keeps the same
+  // workspace id, so a workspace check alone types the prompt into whatever
+  // session happens to be on screen. That is how a session created moments after
+  // start received a continuation meant for the session it replaced.
+  if (!prompt) return
+  if (!isSameSessionShown(get(), sessionPath, workspaceId)) return
 
   // Start the agent first, then wait for the restored session to load its model.
   // The order matters: a session reports its model only once the engine is up, so
@@ -976,7 +997,10 @@ async function continueInterruptedTurn(
   if (get().piStatus !== 'running') {
     await get().startPi()
   }
-  const ready = await waitForSessionReady(get, () => get().activeWorkspace?.id === workspaceId)
+  // Wait for THIS session to be the one loaded, not merely for the workspace to
+  // be up: the ready flag flips as soon as any session in the workspace reports
+  // itself, which is exactly how the wrong chat used to receive the prompt.
+  const ready = await waitForSessionReady(get, () => isSameSessionShown(get(), sessionPath, workspaceId))
   if (!ready) {
     get().addMessage({
       id: generateId(),
@@ -986,6 +1010,11 @@ async function continueInterruptedTurn(
     })
     return
   }
+
+  // Checked again: starting the agent or waiting for it can change which chat is
+  // on screen, and a continuation typed into the wrong session is worse than one
+  // that never fired.
+  if (!isSameSessionShown(get(), sessionPath, workspaceId)) return
 
   try {
     await get().sendPrompt(prompt)
