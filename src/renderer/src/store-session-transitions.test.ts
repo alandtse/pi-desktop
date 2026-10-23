@@ -2791,6 +2791,43 @@ test('cycling back to a session paints it without waiting for the round-trip', a
   assert.ok(painted.length > 0, 'the cached transcript is shown before the refresh answers')
 })
 
+test('a session file reported with different casing still hits its cache', async () => {
+  // Windows reports the same file with whatever casing it likes; a raw-string key
+  // would miss and silently refetch, which is how the slowness would come back.
+  const workspace = {
+    id: 'ws-cache-case',
+    name: 'Case',
+    path: '/tmp/workspace-cache-case',
+    createdAt: 0,
+    lastActiveAt: 0,
+    color: '#000',
+  }
+  activeWorkspaceResult = workspace
+  sessionStateResult = resumedSessionState('/tmp/session-case.jsonl')
+  getMessagesResult = [{ role: 'user', content: [{ type: 'text', text: 'cased' }], timestamp: 1 }]
+  useAppStore.setState({
+    activeWorkspace: workspace,
+    workspaces: [workspace],
+    piStatus: 'running',
+    sessionState: resumedSessionState('/tmp/session-case.jsonl'),
+    activeSessionRuntimeId: 'runtime-case',
+    activeRemoteRef: null,
+    messages: [],
+  })
+  await useAppStore.getState().reloadActiveSession({ refreshList: false })
+  assert.ok(useAppStore.getState().messages.length > 0, 'the first load populated the cache')
+
+  let releaseRefresh = () => {}
+  getMessagesGate = () => new Promise<void>((resolve) => { releaseRefresh = resolve })
+  // Same file, different casing.
+  sessionStateResult = resumedSessionState('/TMP/SESSION-CASE.JSONL')
+  useAppStore.setState({ sessionState: resumedSessionState('/TMP/SESSION-CASE.JSONL'), messages: [] })
+  void useAppStore.getState().reloadActiveSession({ refreshList: false })
+  const painted = useAppStore.getState().messages
+  releaseRefresh()
+  assert.equal(painted.length, 1, 'the cached transcript was found under the folded key')
+})
+
 test('a turn in a session drops its cached transcript', async () => {
   // A cache that outlived a new turn would show a conversation missing its last
   // answer when the tab was revisited, so a finished turn must drop it.

@@ -22,7 +22,7 @@ import { forkPointForUserMessage, normalizeForkMessages, type ForkPoint } from '
 import { buildLineageTree, type LineageNode } from '../../shared/session-lineage'
 import { clampSidebarWidth } from '../../shared/sidebar-width'
 import { workspaceNameFromFolderPath } from '../../shared/folder-drop'
-import { pathsEqual } from '../../shared/path-compare'
+import { pathGroupKey, pathsEqual } from '../../shared/path-compare'
 import { EDITED_TITLE_MAX_CHARS, sessionPreview, stripInjectedPreamble, truncateTitle } from '../../shared/session-preview'
 import { validateModelsConfig, mergeModelsConfig, type ModelsConfig } from '../../shared/models-config'
 import {
@@ -813,11 +813,15 @@ interface CachedTranscript {
   total: number
 }
 const transcriptCache = new Map<string, CachedTranscript>()
+// Session files are compared through the same folding the rest of the app uses,
+// so a path reported with different casing still hits its own entry on Windows.
+const transcriptKey = (sessionPath: string): string => pathGroupKey(sessionPath)
 
 function cacheTranscript(sessionPath: string, entry: CachedTranscript): void {
+  const key = transcriptKey(sessionPath)
   // Re-inserting moves the key to the end, making eviction least-recently-used.
-  transcriptCache.delete(sessionPath)
-  transcriptCache.set(sessionPath, entry)
+  transcriptCache.delete(key)
+  transcriptCache.set(key, entry)
   while (transcriptCache.size > MAX_CACHED_TRANSCRIPTS) {
     const oldest = transcriptCache.keys().next()
     if (oldest.done) break
@@ -826,7 +830,7 @@ function cacheTranscript(sessionPath: string, entry: CachedTranscript): void {
 }
 
 function invalidateSessionTranscript(sessionPath: string | null | undefined): void {
-  if (sessionPath) transcriptCache.delete(sessionPath)
+  if (sessionPath) transcriptCache.delete(transcriptKey(sessionPath))
 }
 let sessionStateRequestId = 0
 let historyLoadingRuntime: string | null = null
@@ -2262,7 +2266,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
     // being cycled back to has almost always not changed, and waiting on the
     // round-trip is what made switching feel slow.
     const currentSessionFile = get().sessionState?.sessionFile
-    const cached = currentSessionFile ? transcriptCache.get(currentSessionFile) : undefined
+    const cached = currentSessionFile ? transcriptCache.get(transcriptKey(currentSessionFile)) : undefined
     if (cached && cached.messages.length > 0 && get().messages.length === 0) {
       set({ messages: cached.messages })
     }
