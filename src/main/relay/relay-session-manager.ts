@@ -296,7 +296,11 @@ export class RelaySessionManager extends EventEmitter {
   async syncSession(): Promise<{ events: RelayServerMessage & { type: 'session_history' } }> {
     const target = this.requirePaired()
     await this.ensureConnected()
-    const reply = await this.request({ type: 'session_sync', id: '' }, target)
+    // The Pi clamps to its own `REMOTE_PI_SYNC_LIMIT` (30 by default), so asking
+    // for more than that is a no-op but asking for nothing guarantees the 30.
+    // A remote session should show the same depth of history a local one does,
+    // so request the server's maximum rather than its minimum.
+    const reply = await this.request({ type: 'session_sync', id: '', limit: Number.MAX_SAFE_INTEGER }, target)
     if (reply.type === 'error') throw new Error(reply.message ?? reply.code)
     return { events: reply as RelayServerMessage & { type: 'session_history' } }
   }
