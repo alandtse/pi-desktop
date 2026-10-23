@@ -2635,3 +2635,40 @@ test('Stop on a local turn still aborts the local Pi', async () => {
   assert.equal(calls.includes('abort'), true)
   assert.equal(calls.includes('relayCancel'), false, 'a local turn must not touch the relay')
 })
+
+// ─── a local turn must not drive the view of a remote session ────────────────
+
+test('a streaming local turn cannot overwrite what a remote session shows', async () => {
+  // The user starts work on this machine, then switches to a remote session.
+  // The local turn keeps running, so its events keep arriving — but the chat is
+  // showing another machine's transcript. Before this guard, those events set
+  // the shared isStreaming flag and the chat rendered the local turn's bubble
+  // over the remote history until the local turn ended, which read as a frozen
+  // tab switch.
+  useAppStore.setState({ activeRemoteRef: { peer: 'PEERKEY', roomId: 'ROOMID' }, isStreaming: false })
+
+  useAppStore.getState().handlePiEvent({ type: 'message_update', delta: 'local token' } as unknown as PiRpcEvent)
+
+  assert.equal(useAppStore.getState().isStreaming, false, 'a remote view stays idle while the local Pi streams')
+  assert.equal(useAppStore.getState().streamingContent, '', 'no local text may enter the remote transcript')
+})
+
+test('a local turn keeps its streaming state while the remote view ignores it', async () => {
+  // Switching back must show the turn that was running all along, so the guard
+  // may not clear state it did not set.
+  useAppStore.setState({ activeRemoteRef: { peer: 'PEERKEY', roomId: 'ROOMID' }, isStreaming: true, streamingContent: 'from the relay' })
+
+  useAppStore.getState().handlePiEvent({ type: 'message_update', delta: 'local token' } as unknown as PiRpcEvent)
+
+  assert.equal(useAppStore.getState().streamingContent, 'from the relay', 'the remote turn is untouched')
+})
+
+test('status and session-name events still apply while a remote session is open', async () => {
+  // These describe the runtime the tabs show, not the remote transcript, so a
+  // blank remote session must not freeze this machine's status display.
+  useAppStore.setState({ activeRemoteRef: { peer: 'PEERKEY', roomId: 'ROOMID' }, piStatus: 'running' })
+
+  useAppStore.getState().handlePiEvent({ type: 'status_change', status: 'error' } as unknown as PiRpcEvent)
+
+  assert.equal(useAppStore.getState().piStatus, 'error', 'local runtime status is not remote content')
+})

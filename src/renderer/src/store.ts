@@ -777,6 +777,22 @@ function normalizePiCommands(raw: unknown): PiCommand[] {
 
 // Navigation invalidates all session I/O. History and state requests also
 // have their own sequence so overlapping loads of one session cannot rewind it.
+/**
+ * Pi events that still apply while a remote session is on screen.
+ *
+ * These describe the local runtime rather than turn content: the status of this
+ * machine's Pi, the name of the session, and a config change. Everything else is
+ * transcript for a conversation the user is not looking at, so it must not drive
+ * the shared streaming state.
+ */
+const REMOTE_SAFE_EVENTS: ReadonlySet<string> = new Set([
+  'status_change',
+  'session_info_changed',
+  'session_info_update',
+  'config_update',
+  'available_commands_update',
+])
+
 let sessionLoadGeneration = 0
 let historyLoadId = 0
 let sessionStateRequestId = 0
@@ -2827,7 +2843,21 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
 
   handlePiEvent: (event) => {
     lastAgentEventAt = Date.now()
-    if ((event.type === 'message_update' || event.type === 'tool_execution_start' || event.type === 'tool_execution_update') && !get().isStreaming) {
+    // A remote session on screen is not this Pi. Its turn events describe a
+    // conversation the user is not looking at, and letting them through drives
+    // the shared streaming state — the chat would keep rendering the local
+    // turn's bubble over the remote transcript until that turn ended, which is
+    // exactly the stall seen when switching tabs mid-answer. The local turn
+    // keeps running in the background; switching back re-reads its history.
+    // Signals that are not turn content (status, session name, config) still
+    // apply, because they describe the runtime the tabs are showing.
+    // Checked BEFORE the stream-restart probe below: that probe would otherwise
+    // mark the remote view as streaming on the first local delta.
+    if (get().activeRemoteRef && !REMOTE_SAFE_EVENTS.has(event.type)) return
+    if (
+      (event.type === 'message_update' || event.type === 'tool_execution_start' || event.type === 'tool_execution_update') &&
+      !get().isStreaming
+    ) {
       // An attach can miss agent_start. Live output is stronger evidence than
       // a runtime snapshot that is still loading.
       set({ isStreaming: true, reattachedMidTurn: true })
