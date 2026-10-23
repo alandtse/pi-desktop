@@ -293,8 +293,15 @@ export class RelaySessionManager extends EventEmitter {
     this.rosterWaiter = null
   }
 
-  /** Pulls the live session transcript. */
-  async syncSession(): Promise<{ events: RelayServerMessage & { type: 'session_history' } }> {
+  /**
+   * Pulls the live session transcript.
+   *
+   * Returns the `session_history` message ITSELF, not a wrapper around it: the
+   * caller reads `events`, `truncated` and `session_started_at` off it, and a
+   * wrapper made every one of those undefined — so a freshly opened remote
+   * session painted as an empty chat until new turns streamed in.
+   */
+  async syncSession(): Promise<RelayServerMessage & { type: 'session_history' }> {
     const target = this.requirePaired()
     await this.ensureConnected()
     // The Pi clamps to its own `REMOTE_PI_SYNC_LIMIT` (30 by default), so asking
@@ -310,7 +317,7 @@ export class RelaySessionManager extends EventEmitter {
       throw error
     })
     if (reply.type === 'error') throw new Error(reply.message ?? reply.code)
-    return { events: reply as RelayServerMessage & { type: 'session_history' } }
+    return reply as RelayServerMessage & { type: 'session_history' }
   }
 
   /**

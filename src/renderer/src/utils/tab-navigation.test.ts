@@ -112,6 +112,31 @@ test('a remote tab is named after the machine, not a folder', () => {
   assert.equal(projects[0].id, 'remoteMachine:peer')
 })
 
+test('a Pi that never reported a hostname is named by a labelled key', () => {
+  // `pair_ok` is the only frame carrying the hostname, so an existing pairing
+  // has none. A bare key prefix reads as a name; labelling it does not.
+  const projects = remoteProjectTabs([{
+    path: 'remote://peer/room', name: 'chat', preview: null, sessionId: 'room',
+    lastModified: 0, messageCount: 1, projectPath: '/Users/x', projectName: 'x',
+    remote: { peer: 'abcdefghijkl', roomId: 'room' },
+  }])
+  assert.equal(projects[0].title, 'Paired Pi abcdefgh')
+})
+
+test('a remote chat hovers with its folder and its session name', () => {
+  // The label is the session, so the folder has to live in the hover.
+  const projects = remoteProjectTabs([remoteRow('room', '/Users/alandtse/open-shaders', 'open-shaders', 'open-shaders')])
+  const tabs = sessionTabs({
+    runtimes: {},
+    workspaceId: undefined,
+    sessionList: [],
+    remoteRows: projects[0].rows,
+    newSessionFallback: 'New',
+  })
+  assert.equal(tabs[0].title, 'open-shaders')
+  assert.equal(tabs[0].tooltip, '/Users/alandtse/open-shaders (open-shaders)')
+})
+
 test('the chats of the machine on screen are session tabs beside local chats', () => {
   const runtimes = { local: runtime('local', 'project', '/local') }
   const machine = remoteProjectTabs([

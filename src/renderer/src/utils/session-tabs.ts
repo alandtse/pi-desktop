@@ -18,7 +18,13 @@ import { pathsEqual } from '../../../shared/path-compare'
 export interface RemoteProjectTab {
   /** Stable for a peer; the tab's identity across roster changes. */
   id: string
-  /** The machine's name, falling back to a short form of its key. */
+  /**
+   * The machine's name as the Pi reported it at pairing time.
+   *
+   * `pair_ok` is the ONLY frame that carries it, so a pairing made before that
+   * field existed has none and cannot learn it without pairing again. The
+   * fallback says which machine by its key instead of inventing a name.
+   */
   title: string
   /** Folders this machine runs sessions in, for the tab's tooltip. */
   paths: string[]
@@ -42,8 +48,9 @@ export function remoteProjectTabs(sessionList: readonly SessionListItem[]): Remo
       groups.set(peer, {
         id: `remoteMachine:${peer}`,
         // The machine's own reported name, never a folder: this tab is the
-        // computer, and a folder name here would read as a second project.
-        title: hostname || peer.slice(0, 8),
+        // computer, and a folder name here would read as a second project. The
+        // key prefix is labelled so a bare token does not read as a name.
+        title: hostname || `Paired Pi ${peer.slice(0, 8)}`,
         paths: folder === '' ? [] : [folder],
         rows: [row],
       })
@@ -67,6 +74,25 @@ export interface SessionTab {
   runtime: SessionRuntimeInfo | null
   /** Remote tabs only: what opening this tab again needs. */
   ref: RemoteSessionRef | null
+  /**
+   * Hover text. For a remote chat this names the folder it runs in on the other
+   * machine, which the label has no room for — the label is the session.
+   */
+  tooltip?: string
+}
+
+/**
+ * Hover text for a remote chat: the folder on the other machine, then the name.
+ *
+ * Two sessions opened in one folder share that folder, so the session name is
+ * what separates them; the folder is what says where the session lives, which
+ * the label has no room for. Falls back to the room id, the only thing an older
+ * Pi always reports.
+ */
+export function describeRemoteSession(session: SessionListItem, roomId: string): string {
+  const folder = session.projectPath || session.projectName
+  const name = session.name || roomId
+  return folder ? `${folder} (${name})` : name
 }
 
 /**
@@ -93,6 +119,9 @@ export function sessionTabs(options: {
     title: row.session.name || row.session.preview?.trim() || row.ref.roomId,
     runtime: null,
     ref: row.ref,
+    // "Folder (session)" — the folder is what tells two same-named sessions on
+    // one machine apart, and the room id is the only last resort.
+    tooltip: describeRemoteSession(row.session, row.ref.roomId),
   }))
 
   const local = Object.values(options.runtimes)

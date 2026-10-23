@@ -84,7 +84,9 @@ export function WorkspaceTabs(): React.JSX.Element {
     () => getSessionTabs({
       runtimes: sessionRuntimes,
       workspaceId: activeWorkspace?.id,
-      sessionList: [],
+      // Local chats are named from their rows; the relay's rows are passed
+      // separately so they cannot leak into the local list.
+      sessionList,
       remoteRows: activeRemoteProject?.rows ?? [],
       newSessionFallback: t('workspaceTabs.newSessionFallback'),
     }),
@@ -361,7 +363,10 @@ export function WorkspaceTabs(): React.JSX.Element {
                   void switchSession(tab.runtime.sessionPath, activeWorkspace?.path)
                 }}
                 className="flex min-w-0 flex-1 items-center gap-1.5 px-1 py-0.5 text-left"
-                title={tab.kind === 'remote' ? `${tab.ref?.hostname ?? ''} ${tab.ref?.roomId ?? ''}`.trim() : tab.runtime?.sessionPath ?? undefined}
+                // A remote chat's hover names the folder it runs in on the other
+                // machine: the label is the session, which does not say where it
+                // lives, and the room id on its own says nothing at all.
+                title={tab.kind === 'remote' ? tab.tooltip : tab.runtime?.sessionPath ?? undefined}
                 aria-current={active ? 'page' : undefined}
               >
                 {tab.kind === 'remote' ? <Laptop size={11} className="shrink-0 text-faint" /> : tab.runtime ? <SessionRuntimeIndicator runtime={tab.runtime} /> : null}

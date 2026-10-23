@@ -499,6 +499,15 @@ interface AppState {
    */
   activeChatKey: string
   /**
+   * The session file a switch is on its way to.
+   *
+   * `switchSession` clears `sessionState` before hydration, and the transcript
+   * cache is keyed by the session file that state carries — so without this the
+   * cache could never be hit on the very path it exists for. Null once the
+   * runtime reports the loaded session.
+   */
+  switchingToSessionFile: string | null
+  /**
    * How much of the remote transcript the other machine actually sent.
    *
    * `null` for a local chat. The Pi reports whether it truncated, but never how
@@ -1572,6 +1581,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
   sendQueues: {},
   heldSendQueues: [],
   activeChatKey: '',
+  switchingToSessionFile: null,
   remoteHistory: null,
   persistSendQueues: () => {
     // Fire-and-forget: the queue in memory is the truth. Persisting is a
@@ -2301,6 +2311,10 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
           sessionState: null,
           sessionStats: null,
           activeSessionRuntimeId: null,
+          // The cache is keyed by the session file, and the line above clears the
+          // field that carries it. Remember the target here so the transcript can
+          // be painted from cache before the round-trip answers.
+          switchingToSessionFile: path,
           // Moving to a local session ends the relay binding. Without this the
           // composer would keep routing prompts to the other machine while the
           // transcript on screen belongs to a session on this one.
@@ -2375,7 +2389,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
     // Paint the transcript we already have before asking for it again: a tab
     // being cycled back to has almost always not changed, and waiting on the
     // round-trip is what made switching feel slow.
-    const currentSessionFile = get().sessionState?.sessionFile
+    const currentSessionFile = get().switchingToSessionFile ?? get().sessionState?.sessionFile
     const cached = currentSessionFile ? transcriptCache.get(transcriptKey(currentSessionFile)) : undefined
     if (cached && cached.messages.length > 0 && get().messages.length === 0) {
       set({ messages: cached.messages })
@@ -2456,6 +2470,8 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
             sessionLoading: false,
             promptHistory: promptHistoryFrom(finalMessages),
             activeChatKey: localQueueKey(sessionFile ?? null, get().activeSessionRuntimeId),
+            // The switch has landed, so the pending target is no longer needed.
+            switchingToSessionFile: null,
           })
         } else {
           set({ sessionLoading: false })

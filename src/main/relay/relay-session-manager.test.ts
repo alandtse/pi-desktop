@@ -167,9 +167,11 @@ test('the session transcript resolves the pending sync', async () => {
   const id = (transport.lastSent?.message as { id: string }).id
   transport.deliver({ type: 'session_history', in_reply_to: id, events: [{ role: 'user', content: 'hi' }], eos: true })
 
-  const { events } = await sync
-  assert.equal(events.type, 'session_history')
-  assert.equal(events.events.length, 1)
+  // The reply ITSELF is the history message: reading it off a wrapper left
+  // `events` undefined and opened every remote session as an empty chat.
+  const history = await sync
+  assert.equal(history.type, 'session_history')
+  assert.equal(history.events.length, 1)
 })
 
 test('a roster push populates the room list', () => {
