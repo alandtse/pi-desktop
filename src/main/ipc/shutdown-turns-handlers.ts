@@ -13,6 +13,7 @@ import { clearShutdownTurns, readShutdownTurns, shouldContinueFromMarker, writeS
 import type { TurnTracker } from '../turn-tracker'
 import { assertTrustedSender } from './validation'
 import { getGuiDataDir } from '../app-data-paths'
+import { appLog } from '../app-log'
 
 /**
  * Writes the record a quit leaves behind, synchronously.
@@ -24,10 +25,14 @@ import { getGuiDataDir } from '../app-data-paths'
  */
 export function recordMidTurnSync(turnTracker: TurnTracker): void {
   const record: ShutdownTurns = { recordedAt: new Date().toISOString(), midTurn: turnTracker.midTurn() }
+  const count = Object.keys(record.midTurn).length
   try {
     writeShutdownTurnsSync(getGuiDataDir(), record)
+    // Logged because the alternative failure is silent: a record that is never
+    // written and one that is written empty look identical on the next start.
+    appLog.info('continue', `Recorded ${count} chat(s) still working at quit`)
   } catch (error) {
-    console.warn('[shutdown-turns] could not record the mid-turn chats', error)
+    appLog.warn('continue', 'Could not record the mid-turn chats', error)
   }
 }
 
