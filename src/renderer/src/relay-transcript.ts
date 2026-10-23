@@ -47,13 +47,6 @@ interface RelayToolResult {
 type RelayEvent = RelayUserInput | RelayAgentMessage | RelayToolRequest | RelayToolResult
 
 /**
- * Turns a tool result into text.
- *
- * The value is `unknown` on the wire because different Pi tools return different
- * shapes; a string is used as-is, anything else is JSON so the user sees the
- * structure rather than `[object Object]`.
- */
-/**
  * Serialises tool arguments for display.
  *
  * Returns `{}` when the value cannot be serialised (a cycle, a BigInt): the call
@@ -68,6 +61,13 @@ function stringifyArgs(value: unknown): string {
   }
 }
 
+/**
+ * Turns a tool result into text.
+ *
+ * The value is `unknown` on the wire because different Pi tools return different
+ * shapes; a string is used as-is, anything else is JSON so the user sees the
+ * structure rather than `[object Object]`.
+ */
 function stringifyResult(value: unknown): string {
   if (typeof value === 'string') return value
   if (value === undefined || value === null) return ''

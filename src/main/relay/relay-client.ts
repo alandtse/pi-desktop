@@ -190,7 +190,8 @@ export class RelayClient {
         let frame: { type?: unknown }
         try {
           frame = JSON.parse(typeof raw === 'string' ? raw : raw.toString())
-        } catch {
+        } catch (error) {
+          appLog.warn('relay', 'Discarded a control frame that was not valid JSON', String(error))
           return
         }
         if (typeof frame.type !== 'string') return

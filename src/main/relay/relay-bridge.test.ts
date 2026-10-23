@@ -43,14 +43,25 @@ class FakeManager implements RelayManagerLike {
     return { ...AGENT, agentName: input.agentName || AGENT.agentName }
   }
   async listRooms(): Promise<RelayRoomInfo[]> {
-    return [ROOM]
+    // The roster the manager is currently holding, which a test drives through
+    // `emitChange`, falling back to the single fixture room.
+    return this.state.rooms.length > 0 ? this.state.rooms : [ROOM]
   }
   async selectRoom(roomId: string): Promise<PairedRelayAgent> {
     this.state = { ...this.state, agent: { ...AGENT, roomId } }
     return { ...AGENT, roomId }
   }
   async syncSession(): Promise<unknown> {
-    return { events: { type: 'session_history', events: [] } }
+    // The reply ITSELF, not a wrapper: returning `{ events: reply }` made every
+    // field of a freshly opened remote session undefined.
+    return {
+      type: 'session_history',
+      in_reply_to: 'sync',
+      session_started_at: 0,
+      events: [{ ts: 1, type: 'user_input', text: 'hello' }],
+      truncated: false,
+      eos: true,
+    }
   }
   async sendPrompt(text: string): Promise<void> {
     this.sent.push(text)
@@ -288,4 +299,40 @@ test('the manager subscription is dropped when the manager is replaced', async (
   await subject.bridge.setUrl('http://b:3000')
   const before = first.listenerCount()
   assert.equal(before, 0, 'the replaced manager must have no listeners left')
+})
+
+test('opening a remote session returns its history, not a wrapper around it', async () => {
+  // The bug this guards: `syncSession` used to return `{ events: reply }`, so
+  // `Array.isArray(result.events)` was false and every remote session painted as
+  // an empty chat. Reverting the unwrap makes the assertions below read undefined.
+  const subject = harness({ relay: { enabled: true, url: 'http://a:3000', pairedAgent: AGENT } })
+  await subject.bridge.start()
+  subject.managers[0]!.emitChange({ status: 'paired', agent: AGENT, rooms: [ROOM] })
+
+  const opened = await subject.bridge.openSession({ peer: AGENT.pubkey, roomId: 'abc' })
+
+  assert.ok(Array.isArray(opened.events), `events must be a list, got ${typeof opened.events}`)
+  assert.equal(opened.events.length, 1)
+  assert.equal(opened.truncated, false)
+  assert.equal(opened.ref.roomId, 'abc')
+  assert.equal(opened.ref.peer, AGENT.pubkey)
+})
+
+test('a remote session row is named after its own session, not the folder', async () => {
+  // Two sessions in one folder share that folder, so a row named after it makes
+  // them indistinguishable in the sidebar and in the tab strip.
+  const subject = harness({ relay: { enabled: true, url: 'http://a:3000', pairedAgent: AGENT } })
+  await subject.bridge.start()
+  subject.managers[0]!.emitChange({
+    status: 'paired',
+    agent: AGENT,
+    rooms: [ROOM, { ...ROOM, name: 'project#2', room_id: 'def' }],
+  })
+
+  const rows = await subject.bridge.sessions()
+
+  assert.deepEqual(rows.map((row) => row.session.name), ['project', 'project#2'])
+  assert.deepEqual(rows.map((row) => row.ref.roomId), ['abc', 'def'])
+  // Two rooms in one folder must still be two rows, not one collapsed entry.
+  assert.equal(new Set(rows.map((row) => row.session.path)).size, 2)
 })

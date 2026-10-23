@@ -46,7 +46,7 @@ let sessionStateResult: SessionState | null = null
 // What the stubbed interruption probe reports for a resumed session. Only the
 // continuation tests set this; the default is a finished turn, which asks for no
 // prompt at all.
-const resumeTargetResult: string | null = null
+let resumeTargetResult: string | null = null
 // Runs inside the stubbed session.switch, i.e. while the resume is still in flight.
 let switchHook: (() => void) | null = null
 // Gates the stubbed getMessages so a test can observe what is on screen while a
@@ -363,6 +363,7 @@ beforeEach(() => {
   fileSearchHook = null
   sessionStateResult = null
   interruptionReason = null
+  resumeTargetResult = null
   switchHook = null
   sessionDeleteResult = { ok: true, method: 'trash', replacementSessionPath: null }
   forkMessagesResult = []

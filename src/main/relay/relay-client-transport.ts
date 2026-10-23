@@ -49,7 +49,8 @@ export class RelayClientTransport implements RelayTransport {
     let parsed: { type?: unknown }
     try {
       parsed = JSON.parse(raw)
-    } catch {
+    } catch (error) {
+      appLog.warn('relay', 'Discarded a relay frame that could not be parsed', String(error))
       return
     }
     if (typeof parsed.type === 'string') {

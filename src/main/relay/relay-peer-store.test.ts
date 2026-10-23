@@ -4,7 +4,7 @@ import { mkdtemp, rm, readFile, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { generateRelayKeypair } from './identity'
-import { clearRelayTarget, readRelayPeer, relayPeerStorePath, writeRelayPeer, type RelayPeerRecord } from './relay-peer-store'
+import { readRelayPeer, relayPeerStorePath, writeRelayPeer, type RelayPeerRecord } from './relay-peer-store'
 
 const dirs: string[] = []
 
@@ -72,14 +72,13 @@ test('an unknown store version is rejected, not migrated blindly', async () => {
   assert.equal(await readRelayPeer(dir), null)
 })
 
-test('clearRelayTarget drops the pairing but keeps the same keypair', async () => {
+test('unpairing drops the target but keeps the same keypair', async () => {
+  // Driven through the store's own write path, which is what `unpair` uses.
   const dir = await tempDir()
   const written = record({ pubkey: 'b'.repeat(43) + '=', agentName: 'macbook', roomId: null, pairedAt: '2026-10-18T00:00:00.000Z' })
   await writeRelayPeer(dir, written)
 
-  const cleared = await clearRelayTarget(dir, written)
-  assert.equal(cleared.target, null)
-  assert.deepEqual(cleared.keypair, written.keypair)
+  await writeRelayPeer(dir, { ...written, target: null })
 
   const read = await readRelayPeer(dir)
   assert.ok(read)

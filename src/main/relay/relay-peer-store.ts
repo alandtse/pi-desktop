@@ -78,9 +78,3 @@ export async function writeRelayPeer(userDataDir: string, record: RelayPeerRecor
   await rename(temporary, path)
 }
 
-/** Removes the pairing, keeping the keypair so a re-pair is not a new identity. */
-export async function clearRelayTarget(userDataDir: string, record: RelayPeerRecord): Promise<RelayPeerRecord> {
-  const next: RelayPeerRecord = { keypair: record.keypair, target: null }
-  await writeRelayPeer(userDataDir, next)
-  return next
-}

@@ -20,7 +20,8 @@ import { detectRelayUrl } from '../relay/relay-url-detection'
  * and must never reach the socket unparsed, and no handler returns the private
  * key or the pairing token.
  */
-export function registerRelayHandlers(bridge: RelaySessionBridge): void {
+/** The socket: status, relay URL detection, and the URL itself. */
+function registerRelayConnectionHandlers(bridge: RelaySessionBridge): void {
   ipcMain.handle(IPC_CHANNELS.RELAY_STATUS, async (event) => {
     assertTrustedSender(event)
     return bridge.getStatus()
@@ -49,7 +50,10 @@ export function registerRelayHandlers(bridge: RelaySessionBridge): void {
     }
     return bridge.setUrl(normalized)
   })
+}
 
+/** Pairing input is user-pasted text, so it never reaches the socket unparsed. */
+function registerRelayPairingHandlers(bridge: RelaySessionBridge): void {
   ipcMain.handle(IPC_CHANNELS.RELAY_PAIR, async (event, input: unknown): Promise<PairedRelayAgent> => {
     assertTrustedSender(event)
     const uri = typeof input === 'string' ? input : ''
@@ -69,7 +73,10 @@ export function registerRelayHandlers(bridge: RelaySessionBridge): void {
     assertTrustedSender(event)
     return bridge.unpair()
   })
+}
 
+/** Reading the paired machine: its roster, its sessions, one history. */
+function registerRelaySessionHandlers(bridge: RelaySessionBridge): void {
   ipcMain.handle(IPC_CHANNELS.RELAY_LIST_ROOMS, async (event) => {
     assertTrustedSender(event)
     return bridge.listRooms()
@@ -113,7 +120,10 @@ export function registerRelayHandlers(bridge: RelaySessionBridge): void {
       throw error
     }
   })
+}
 
+/** Acting on the paired machine: prompts, cancellation, mirrored controls. */
+function registerRelayDriveHandlers(bridge: RelaySessionBridge): void {
   ipcMain.handle(IPC_CHANNELS.RELAY_SEND_PROMPT, async (event, text: unknown, options: unknown) => {
     assertTrustedSender(event)
     if (typeof text !== 'string' || !text.trim()) throw new Error('A prompt cannot be empty')
@@ -152,6 +162,20 @@ export function registerRelayHandlers(bridge: RelaySessionBridge): void {
     return bridge.listModels()
   })
 }
+
+/**
+ * Remote-pi relay channels.
+ *
+ * Every handler is a thin validation shell: no handler returns the private key
+ * or the pairing token.
+ */
+export function registerRelayHandlers(bridge: RelaySessionBridge): void {
+  registerRelayConnectionHandlers(bridge)
+  registerRelayPairingHandlers(bridge)
+  registerRelaySessionHandlers(bridge)
+  registerRelayDriveHandlers(bridge)
+}
+
 
 /**
  * Narrows a prompt's optional images.

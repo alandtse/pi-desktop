@@ -15,14 +15,6 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { normalizeRelayUrl } from '../../shared/relay-protocol'
 
-/**
- * The community default, matching remote-pi's `kDefaultRelayUrl`.
- *
- * Documented for parity rather than offered: see `detectRelayUrl` for why it is
- * never auto-filled.
- */
-export const COMMUNITY_RELAY_URL = 'https://relay-rp1.jacobmoura.work'
-
 /** Only sources the user configured on this machine; never the public default. */
 export type RelayUrlSource = 'env' | 'config'
 

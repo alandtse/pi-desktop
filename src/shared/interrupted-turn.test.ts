@@ -139,8 +139,10 @@ test('a tool that finished with no answer after it is an interruption', () => {
 
 test('a result trailing an aborted answer is still not resumed', () => {
   // The user stopped the turn; a result landing afterwards does not reopen it.
+  // Reading only the trailing result made this resumable, which would undo the
+  // stop the user asked for.
   assert.equal(
     interruptionReason([{ role: 'user' }, assistant('aborted', ['call_1']), result('call_1')]),
-    'tool-call-unanswered',
+    null,
   )
 })

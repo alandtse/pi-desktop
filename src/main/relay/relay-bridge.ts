@@ -93,8 +93,7 @@ export class RelaySessionBridge {
        * own state from the roster; without this the repair lives only in memory
        * and the next launch addresses the dead room again.
        */
-      persistAgent?: (agent: PairedRelayAgent) => Promise<void>
-    },
+        },
   ) {}
 
   onStatusChange(listener: (status: RelayStatus) => void): () => void {
@@ -192,7 +191,7 @@ export class RelaySessionBridge {
       appLog.info('relay', 'No remote sessions listed', String(error))
       return []
     })
-    return rooms.map((room) => toRemoteSessionRow(room, agent, state.detail))
+    return rooms.map((room) => toRemoteSessionRow(room, agent))
   }
 
   /**
@@ -359,10 +358,18 @@ export class RelaySessionBridge {
  * unique per (peer, room) so the store's `path ===` comparisons keep working and
  * React keys stay stable.
  */
+/**
+ * The message count a relay row reports.
+ *
+ * The roster carries no count and the history is only fetched when a session is
+ * opened, so a row is marked non-empty rather than claiming a total it does not
+ * have — the sidebar uses this only to show an activity dot.
+ */
+const REMOTE_ROW_MESSAGE_COUNT = 1
+
 function toRemoteSessionRow(
   room: RelayRoomInfo,
   agent: PairedRelayAgent,
-  _detail?: string,
 ): RemoteSessionRow {
   const folderName = room.cwd.split(/[\\/]/).filter(Boolean).pop() || room.cwd || room.room_id
   const startedAt = typeof room.started_at === 'number' && room.started_at > 0 ? room.started_at : Date.now()
@@ -375,7 +382,7 @@ function toRemoteSessionRow(
     lastModified: startedAt,
     // The relay does not report a per-room message count; 0 would read as "empty
     // session" in the sidebar, so leave it at 1 to mean "exists, unknown size".
-    messageCount: 1,
+    messageCount: REMOTE_ROW_MESSAGE_COUNT,
     projectPath: room.cwd,
     projectName: folderName,
     // The machine's name, never the agent's: `agentName` is the session's, so two
@@ -386,6 +393,6 @@ function toRemoteSessionRow(
 }
 
 /** A stable, unique stand-in for a session file path. Never used as a real path. */
-export function remoteSessionPath(peer: string, roomId: string): string {
+function remoteSessionPath(peer: string, roomId: string): string {
   return `remote://${peer}/${roomId}`
 }

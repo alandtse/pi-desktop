@@ -996,6 +996,9 @@ async function flushResumedTurnCandidates(get: () => AppState & AppActions): Pro
  */
 export const CONTINUATION_READY_TIMEOUT_MS = 30_000
 
+/** How often the continuation path re-checks whether the resumed session is ready. */
+const CONTINUATION_POLL_INTERVAL_MS = 250
+
 /**
  * Resolves once the active session reports a model, or after `timeoutMs`.
  *
@@ -1012,7 +1015,7 @@ async function waitForSessionReady(
     if (!isStillCurrent()) return false
     if (get().sessionState?.model) return true
     if (Date.now() - started >= timeoutMs) return false
-    await new Promise((resolve) => setTimeout(resolve, 250))
+    await new Promise((resolve) => setTimeout(resolve, CONTINUATION_POLL_INTERVAL_MS))
   }
 }
 
@@ -1059,7 +1062,10 @@ async function continueInterruptedTurn(
   let reason: InterruptedReason | null
   try {
     reason = await window.piDesktop.session.interruption(sessionPath)
-  } catch {
+  } catch (err) {
+    // Logged rather than swallowed: a failed probe is indistinguishable from a
+    // finished turn, so the feature would silently never fire.
+    console.warn('[continuation] interruption probe failed', err)
     return
   }
   const prompt = continuationPrompt({
@@ -2686,10 +2692,11 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
     let rows: RemoteSessionRow[]
     try {
       rows = await window.piDesktop.relay.sessions()
-    } catch {
+    } catch (error) {
       // A failed refresh must not erase rows the user can see. The relay drops a
       // repeated `rooms_check` reply, so a transient timeout here is normal and
       // says nothing about the sessions still running on the paired Pi.
+      console.warn('[relay] session refresh failed', error)
       return
     }
     const remote = rows.map((row) => row.session)

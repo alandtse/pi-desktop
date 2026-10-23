@@ -12,9 +12,8 @@ export interface RelayKeypair {
   privateKeyPem: string
 }
 
-/** SPKI DER for an Ed25519 key is a 12-byte header followed by the 32-byte key. */
-const ED25519_SPKI_PREFIX_BYTES = 12
-const ED25519_RAW_KEY_BYTES = 32
+/** Length of the raw Ed25519 key, which is the tail of its SPKI encoding. */
+export const ED25519_RAW_KEY_BYTES = 32
 
 export function generateRelayKeypair(): RelayKeypair {
   const { publicKey, privateKey } = generateKeyPairSync('ed25519')
@@ -62,4 +61,3 @@ export function isValidRelayKeypair(value: unknown): value is RelayKeypair {
   }
 }
 
-export { ED25519_RAW_KEY_BYTES, ED25519_SPKI_PREFIX_BYTES }

@@ -32,6 +32,14 @@ export interface RemoteProjectTab {
   rows: { session: SessionListItem; ref: RemoteSessionRef }[]
 }
 
+/**
+ * How many characters of a peer key name a machine that never reported one.
+ *
+ * Enough to tell two machines apart in a tab, short enough not to be a wall of
+ * base64; a key is 44 characters.
+ */
+export const PEER_KEY_PREFIX_LENGTH = 8
+
 /** Groups the relay's session rows by the machine each one runs on. */
 export function remoteProjectTabs(sessionList: readonly SessionListItem[]): RemoteProjectTab[] {
   const groups = new Map<string, RemoteProjectTab>()
@@ -50,7 +58,7 @@ export function remoteProjectTabs(sessionList: readonly SessionListItem[]): Remo
         // The machine's own reported name, never a folder: this tab is the
         // computer, and a folder name here would read as a second project. The
         // key prefix is labelled so a bare token does not read as a name.
-        title: hostname || `Paired Pi ${peer.slice(0, 8)}`,
+        title: hostname || `Paired Pi ${peer.slice(0, PEER_KEY_PREFIX_LENGTH)}`,
         paths: folder === '' ? [] : [folder],
         rows: [row],
       })

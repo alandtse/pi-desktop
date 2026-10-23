@@ -45,6 +45,14 @@ export interface RelayManagerOptions {
   requestTimeoutMs?: number
 }
 
+/**
+ * The sync page size: everything the Pi is willing to send.
+ *
+ * The Pi clamps this to its own `REMOTE_PI_SYNC_LIMIT`, so asking for the maximum
+ * cannot over-fetch; naming it keeps the intent visible at the call site.
+ */
+const SYNC_EVERYTHING = Number.MAX_SAFE_INTEGER
+
 const DEFAULT_REQUEST_TIMEOUT_MS = 15_000
 
 interface PendingRequest {
@@ -64,7 +72,7 @@ export class RelaySessionManager extends EventEmitter {
   private state: RelayManagerState
   private readonly pending = new Map<string, PendingRequest>()
   private requestCounter = 0
-  /** The id of the most recent prompt, which  names as its target. */
+  /** The id of the most recent prompt, which `cancel` names as its target. */
   private lastPromptId: string | null = null
   private readonly requestTimeoutMs: number
   /** Peers we asked for a roster from and have not heard back about yet. */
@@ -308,7 +316,7 @@ export class RelaySessionManager extends EventEmitter {
     // for more than that is a no-op but asking for nothing guarantees the 30.
     // A remote session should show the same depth of history a local one does,
     // so request the server's maximum rather than its minimum.
-    const reply = await this.request({ type: 'session_sync', id: '', limit: Number.MAX_SAFE_INTEGER }, target).catch((error: unknown) => {
+    const reply = await this.request({ type: 'session_sync', id: '', limit: SYNC_EVERYTHING }, target).catch((error: unknown) => {
       // The relay drops a frame for a `(peer, room)` pair with no live
       // connection and answers with nothing at all, so a timeout here means the
       // session is gone rather than the Pi being slow. Re-asking for the roster
@@ -375,7 +383,7 @@ export class RelaySessionManager extends EventEmitter {
     if (options?.steer) message.streaming_behavior = 'steer'
     const sent = this.options.transport.send(message, target)
     if (!sent) throw new Error('The relay connection is not open')
-    // Kept so  can name the message it stops.
+    // Kept so `cancel` can name the message it stops.
     this.lastPromptId = id
   }
 
