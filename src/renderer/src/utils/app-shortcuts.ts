@@ -5,7 +5,8 @@ import {
 import type { AppSettings } from '../../../shared/ipc-contracts'
 import { useAppStore } from '../store'
 import { requestCommitPushDialog } from './commit-push-shortcut'
-import { adjacentTabIndex, projectTabs, sessionTabs } from './tab-navigation'
+import { adjacentTabIndex, projectTabs } from './tab-navigation'
+import { isTabActive, sessionTabs } from './session-tabs'
 import { emitVoiceShortcut } from '../voice/voice-shortcut'
 
 /** Actions that run once per key press; the voice keys are handled in dispatchAppShortcut. */
@@ -84,13 +85,24 @@ export async function runAppShortcut(action: CommandShortcutAction): Promise<voi
     }
     case 'previousSession':
     case 'nextSession': {
-      const tabs = sessionTabs(state.sessionRuntimes, state.activeWorkspace?.id)
-      const index = adjacentTabIndex(tabs.findIndex((tab) => tab.runtimeId === state.activeSessionRuntimeId || tab.active), tabs.length,
-        action === 'nextSession' ? 'next' : 'previous')
+      const tabs = sessionTabs({
+        runtimes: state.sessionRuntimes,
+        workspaceId: state.activeWorkspace?.id,
+        sessionList: state.sessionList,
+        newSessionFallback: '',
+      })
+      const index = adjacentTabIndex(
+        tabs.findIndex((tab) => isTabActive(tab, state.activeSessionRuntimeId, state.activeRemoteRef)),
+        tabs.length,
+        action === 'nextSession' ? 'next' : 'previous',
+      )
       if (index === null) return
+      const target = tabs[index]
       state.setWorkflowPanelOpen(false)
       state.setCurrentView('chat')
-      await state.switchSession(tabs[index].sessionPath!, state.activeWorkspace?.path)
+      // Cycling reaches a remote tab the same way it reaches a local one.
+      if (target.kind === 'remote') { await state.openRemoteSession(target.ref!); return }
+      await state.switchSession(target.runtime!.sessionPath!, state.activeWorkspace?.path)
       return
     }
     case 'settings':

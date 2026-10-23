@@ -1,4 +1,4 @@
-import type { SessionRuntimeInfo, Workspace } from '../../../shared/ipc-contracts'
+import type { Workspace } from '../../../shared/ipc-contracts'
 
 export const PROJECT_TAB_ORDER_STORAGE_KEY = 'pi-desktop.project-tab-order'
 
@@ -34,10 +34,6 @@ export function moveProjectTab(order: string[], sourceId: string, targetId: stri
   return next
 }
 
-export function sessionTabs(runtimes: Record<string, SessionRuntimeInfo>, workspaceId: string | undefined): SessionRuntimeInfo[] {
-  // Newest runtime first; selecting a tab never changes its position.
-  return Object.values(runtimes).filter((runtime) => runtime.workspaceId === workspaceId && runtime.sessionPath).reverse()
-}
 
 export function adjacentTabIndex(activeIndex: number, count: number, direction: 'previous' | 'next'): number | null {
   if (count === 0) return null

@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { adjacentTabIndex, moveProjectTab, projectTabs, sessionTabs } from './tab-navigation'
-import type { SessionRuntimeInfo, Workspace } from '../../../shared/ipc-contracts'
+import { adjacentTabIndex, moveProjectTab, projectTabs } from './tab-navigation'
+import { sessionTabs } from './session-tabs'
+import type { SessionListItem, SessionRuntimeInfo, Workspace } from '../../../shared/ipc-contracts'
 
 const workspace = (id: string, createdAt: number): Workspace => ({ id, createdAt, name: id, path: `/${id}`, lastActiveAt: 0, color: '' })
 const runtime = (runtimeId: string, workspaceId: string, sessionPath: string | null): SessionRuntimeInfo => ({
@@ -57,8 +58,34 @@ test('session order includes only open tabs in this project, newest first', () =
     starting: runtime('starting', 'project', null),
     last: runtime('last', 'project', '/last'),
   }
-  assert.deepEqual(sessionTabs(runtimes, 'project').map((tab) => tab.runtimeId), ['last', 'first'])
+  const rows: SessionListItem[] = [
+    { path: '/first', name: 'First', preview: null, sessionId: 's1', lastModified: 0, messageCount: 0, projectPath: '/p', projectName: 'p' },
+    { path: '/last', name: 'Last', preview: null, sessionId: 's2', lastModified: 0, messageCount: 0, projectPath: '/p', projectName: 'p' },
+  ]
+  const tabs = () => sessionTabs({ runtimes, workspaceId: 'project', sessionList: rows, newSessionFallback: 'New' })
+  assert.deepEqual(tabs().map((tab) => tab.id), ['last', 'first'])
+  assert.deepEqual(tabs().map((tab) => tab.title), ['Last', 'First'])
   runtimes.first.active = true
-  assert.deepEqual(sessionTabs(runtimes, 'project').map((tab) => tab.runtimeId), ['last', 'first'])
-  assert.deepEqual(sessionTabs(runtimes, undefined), [])
+  assert.deepEqual(tabs().map((tab) => tab.id), ['last', 'first'])
+  assert.deepEqual(
+    sessionTabs({ runtimes, workspaceId: undefined, sessionList: rows, newSessionFallback: 'New' }).map((tab) => tab.id),
+    [],
+  )
+})
+
+test('a remote session is a tab beside the local ones', () => {
+  const runtimes = { local: runtime('local', 'project', '/local') }
+  const rows: SessionListItem[] = [
+    { path: '/local', name: 'Local chat', preview: null, sessionId: 'l1', lastModified: 0, messageCount: 0, projectPath: '/p', projectName: 'p' },
+    {
+      path: 'remote://peer/room', name: 'Mac chat', preview: null, sessionId: 'r1',
+      lastModified: 0, messageCount: 0, projectPath: '/Users/alandtse', projectName: 'alandtse',
+      remote: { peer: 'peer', roomId: 'room', hostname: 'mac' },
+    },
+  ]
+  const tabs = sessionTabs({ runtimes, workspaceId: 'project', sessionList: rows, newSessionFallback: 'New' })
+  assert.deepEqual(tabs.map((tab) => tab.kind), ['local', 'remote'])
+  assert.equal(tabs[1].title, 'Mac chat')
+  assert.equal(tabs[1].runtime, null)
+  assert.equal(tabs[1].ref?.roomId, 'room')
 })

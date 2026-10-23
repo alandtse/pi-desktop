@@ -1,6 +1,7 @@
 import type { PiRpcManager } from './pi-rpc-manager'
 import type {
   PendingPromptCounts,
+  PiAgentEndEvent,
   PiExtensionUiRequest,
   PiProcessStatus,
   PiRpcEvent,
@@ -173,6 +174,17 @@ export function createPiEventRouter(deps: PiEventRouterDeps): PiEventRouter {
     emitCounts()
   }
 
+  /**
+   * Events the renderer needs even when the turn is in another chat. A finished
+   * turn is one: a queue on a background chat only drains when its own turn ends,
+   * and the end of a background turn reaches nobody unless it is forwarded. The
+   * forwarded event carries its workspace so the renderer can tell which chat it
+   * belongs to; anything chat-scoped stays on the active-session path.
+   */
+  const FORWARDED_FROM_BACKGROUND: ReadonlySet<string> = new Set([
+    'agent_end',
+  ])
+
   const handleManagerEvent = (manager: PiRpcManager, event: PiRpcEvent): void => {
     if (isBlockingDialog(event)) {
       handleBlockingDialog(manager, event)
@@ -180,7 +192,17 @@ export function createPiEventRouter(deps: PiEventRouterDeps): PiEventRouter {
     }
     if (manager === deps.getActiveManager()) {
       deps.broadcastEvent(event)
+      return
     }
+    if (!FORWARDED_FROM_BACKGROUND.has(event.type)) return
+    // A background chat has no workspace to attribute the event to when the
+    // manager is unknown, and an unattributed end could settle another chat's
+    // queue; drop it rather than guess.
+    const workspaceId = deps.workspaceIdFor(manager)
+    if (workspaceId === null) return
+    // Only agent_end is forwarded, so the cast names that narrowed union.
+    const ended = event as PiAgentEndEvent
+    deps.broadcastEvent({ ...ended, backgroundWorkspaceId: workspaceId })
   }
 
   /**

@@ -9,6 +9,7 @@ import { registerTerminalHandlers } from './ipc/terminal-handlers'
 import { registerSessionHandlers } from './ipc/session-handlers'
 import { registerModelHandlers } from './ipc/model-handlers'
 import { registerSettingsHandlers } from './ipc/settings'
+import { registerSendQueueHandlers } from './ipc/send-queue'
 import { registerPermissionRulesHandlers } from './ipc/permission-rules-handlers'
 import { registerThemeHandlers } from './ipc/theme-handlers'
 import { registerWorkspaceHandlers } from './ipc/workspace-handlers'
@@ -61,6 +62,7 @@ export function registerIpcHandlers(
   registerSessionHandlers(ctx)
   registerModelHandlers(ctx)
   registerSettingsHandlers(ctx)
+  registerSendQueueHandlers()
   registerPermissionRulesHandlers(ctx)
   registerThemeHandlers()
   registerWorkspaceHandlers(ctx)

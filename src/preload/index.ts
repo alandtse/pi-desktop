@@ -52,6 +52,7 @@ import type {
   OpenAttachmentDialogOptions,
   PathKindResult,
   PromptImage,
+  QueuedPrompt,
   ActivityStatsResult,
   DiagnosticsReport,
   ThemesListResult,
@@ -292,6 +293,12 @@ interface PiDesktopAPI {
     installSkill(): Promise<TypeSafeStatus>
     removeSkill(): Promise<TypeSafeStatus>
   }
+
+  /** The send queue as last written, so a restart does not discard it. */
+  sendQueue: {
+    load(): Promise<Record<string, readonly QueuedPrompt[]>>
+    save(queues: Record<string, readonly QueuedPrompt[]>): Promise<void>
+  },
 
   // Remote-pi relay: browse and drive a Pi running on another machine. Every
   // channel is inert until a pairing link has been accepted.
@@ -647,6 +654,11 @@ const api: PiDesktopAPI = {
       ipcRenderer.on(IPC_CHANNELS.EVENT_VOICE_SHORTCUT, handler)
       return () => ipcRenderer.removeListener(IPC_CHANNELS.EVENT_VOICE_SHORTCUT, handler)
     },
+  },
+
+  sendQueue: {
+    load: () => ipcRenderer.invoke(IPC_CHANNELS.SEND_QUEUE_LOAD),
+    save: (queues) => ipcRenderer.invoke(IPC_CHANNELS.SEND_QUEUE_SAVE, queues),
   },
 
   relay: {

@@ -6,7 +6,17 @@ import { applyUiFont } from './utils/ui-font'
 import { t } from '../../shared/i18n'
 import { buildPlanningPrompt } from './utils/planning-prompt'
 import { composePrompt } from './utils/compose-prompt'
-import { firstQueued, withQueued, withoutQueued, withoutWorkspaceQueue, type SendQueues } from './send-queue'
+import {
+  firstQueued,
+  localQueueKey,
+  pruneQueues,
+  remoteQueueKey,
+  withQueued,
+  withoutQueue,
+  withoutQueued,
+  type SendQueues,
+} from './send-queue'
+import { promptHistoryFrom } from './prompt-history'
 import { moveProjectTab, projectTabs, readProjectTabOrder, rememberProjectTabOrder } from './utils/tab-navigation'
 import { parseAgentMessage, type DisplayAttachment, type DisplayMessage } from './message-parsing'
 import { relayEventsToDisplayMessages } from './relay-transcript'
@@ -477,11 +487,25 @@ interface AppState {
    * or failed, so sending the next message by itself would surprise the user
    * or fail again. The user's next send releases it.
    */
+  /** Chat keys whose queue is held after a failed or stopped turn. */
   heldSendQueues: string[]
-  queuePrompt: (workspaceId: string, text: string, attachments: ComposerAttachment[]) => void
-  removeQueuedPrompt: (workspaceId: string, promptId: string) => void
+  /**
+   * The queue key of the chat that was opened last.
+   *
+   * The key is derived from the loaded session file whenever that is known, and
+   * this is what it falls back to while the state is briefly empty (mid-load, or
+   * while a turn refreshes session state). Without it a queue would be filed
+   * under a second key and never drained.
+   */
+  activeChatKey: string
+  /** Writes the queue so a restart resumes it; called after every change. */
+  persistSendQueues: () => void
+  /** Loads what a previous run left pending. */
+  restoreSendQueues: () => Promise<void>
+  queuePrompt: (key: string, text: string, attachments: ComposerAttachment[]) => void
+  removeQueuedPrompt: (key: string, promptId: string) => void
   /** Send one queued message at once: into the running turn, or as a new prompt when idle. */
-  sendQueuedPromptNow: (workspaceId: string, promptId: string) => Promise<void>
+  sendQueuedPromptNow: (key: string, promptId: string) => Promise<void>
   // Set by the diff shortcuts; the diff viewer or Git actions consume and clear it.
   diffShortcutRequest: 'review' | 'commitPush' | null
   // A prompt queued for insertion into the chat input. The nonce lets the
@@ -1092,36 +1116,81 @@ function endTurnWithoutAgent(set: ZustandSet, get: () => AppState & AppActions, 
 
 // ─── Send Queue ─────────────────────────────────────────────────────────────
 
-function activeWorkspaceId(get: () => AppState & AppActions): string {
-  return get().activeWorkspace?.id ?? ''
-}
-
-function holdSendQueue(set: ZustandSet, get: () => AppState & AppActions): void {
-  const workspaceId = activeWorkspaceId(get)
-  set((state) => state.heldSendQueues.includes(workspaceId) ? state : { heldSendQueues: [...state.heldSendQueues, workspaceId] })
+function holdSendQueue(set: ZustandSet, get: () => AppState & AppActions, key?: string): void {
+  const queueKey = key ?? activeQueueKey(get())
+  set((state) => state.heldSendQueues.includes(queueKey) ? state : { heldSendQueues: [...state.heldSendQueues, queueKey] })
 }
 
 function releaseSendQueue(set: ZustandSet, get: () => AppState & AppActions): void {
-  const workspaceId = activeWorkspaceId(get)
-  set((state) => state.heldSendQueues.includes(workspaceId)
-    ? { heldSendQueues: state.heldSendQueues.filter((id) => id !== workspaceId) }
+  const queueKey = activeQueueKey(get())
+  set((state) => state.heldSendQueues.includes(queueKey)
+    ? { heldSendQueues: state.heldSendQueues.filter((id) => id !== queueKey) }
     : state)
 }
 
 /**
- * The active turn is over: send the oldest queued message, unless the turn
- * failed (then hold the queue: the next one would likely fail too) or the
- * queue is already held (the user stopped the turn).
+ * Drops the queues of every chat belonging to a project that was removed.
+ *
+ * A project owns several chats and a chat's key names a session file or a relay
+ * room, neither of which mentions the project, so the project's chats are
+ * resolved from the runtimes that are still registered for it.
  */
-function settleSendQueue(set: ZustandSet, get: () => AppState & AppActions, failed: boolean): void {
+function withoutProjectQueues(
+  queues: SendQueues,
+  removedWorkspaceId: string,
+  runtimes: Record<string, SessionRuntimeInfo>,
+): SendQueues {
+  const doomed = new Set<string>()
+  // A runtime names the workspace it belongs to, and a chat's queue key names a
+  // session file, so the project's queues are found through the runtimes rather
+  // than by matching paths: the workspace is already gone by the time this runs.
+  for (const runtime of Object.values(runtimes)) {
+    if (runtime.workspaceId === removedWorkspaceId) {
+      doomed.add(localQueueKey(runtime.sessionPath, runtime.runtimeId))
+      if (runtime.sessionPath) doomed.add(localQueueKey(runtime.sessionPath, null))
+    }
+  }
+  let next = queues
+  for (const key of doomed) next = withoutQueue(next, key)
+  return next
+}
+
+/**
+ * The queue key of the chat on screen.
+ *
+ * Derived from what identifies a chat rather than stored: keeping a copy in
+ * state meant it could disagree with the session actually loaded, which is how a
+ * queue ended up draining into whichever chat happened to be active.
+ */
+export function activeQueueKey(state: {
+  activeRemoteRef: RemoteSessionRef | null
+  sessionState: SessionState | null
+  activeSessionRuntimeId: string | null
+  activeChatKey: string
+}): string {
+  if (state.activeRemoteRef) return remoteQueueKey(state.activeRemoteRef)
+  if (state.sessionState?.sessionFile) return localQueueKey(state.sessionState.sessionFile, state.activeSessionRuntimeId)
+  return state.activeChatKey || localQueueKey(null, state.activeSessionRuntimeId)
+}
+
+/**
+ * A turn is over: send that chat's oldest queued message, unless the turn
+ * failed (then hold the queue: the next one would likely fail too) or the queue
+ * is already held (the user stopped the turn).
+ *
+ * `key` names the chat whose turn ended. It is passed explicitly because a turn
+ * can end in a chat that is not on screen -- the queue belongs to that chat, and
+ * settling the visible one instead would send the wrong conversation's message.
+ */
+function settleSendQueue(set: ZustandSet, get: () => AppState & AppActions, failed: boolean, key?: string): void {
+  const queueKey = key ?? activeQueueKey(get())
   if (failed) {
-    holdSendQueue(set, get)
+    holdSendQueue(set, get, queueKey)
     return
   }
-  const workspaceId = activeWorkspaceId(get)
-  if (get().heldSendQueues.includes(workspaceId)) return
-  const next = firstQueued(get().sendQueues, workspaceId)
-  if (next) void get().sendQueuedPromptNow(workspaceId, next.id)
+  if (get().heldSendQueues.includes(queueKey)) return
+  const next = firstQueued(get().sendQueues, queueKey)
+  if (next) void get().sendQueuedPromptNow(queueKey, next.id)
 }
 
 // ─── Turn Activity ──────────────────────────────────────────────────────────
@@ -1494,16 +1563,45 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
   }),
   sendQueues: {},
   heldSendQueues: [],
-  queuePrompt: (workspaceId, text, attachments) =>
-    set((state) => ({ sendQueues: withQueued(state.sendQueues, workspaceId, { id: generateId(), text, attachments }) })),
-  removeQueuedPrompt: (workspaceId, promptId) =>
-    set((state) => ({ sendQueues: withoutQueued(state.sendQueues, workspaceId, promptId) })),
-  sendQueuedPromptNow: async (workspaceId, promptId) => {
-    // sendPrompt reaches the active workspace's agent only.
-    if (workspaceId !== (get().activeWorkspace?.id ?? '')) return
-    const queued = get().sendQueues[workspaceId]?.find((prompt) => prompt.id === promptId)
+  activeChatKey: '',
+  persistSendQueues: () => {
+    // Fire-and-forget: the queue in memory is the truth. Persisting is a
+    // convenience, so a write that cannot happen must never fail the action that
+    // triggered it -- losing a turn to a full disk would be the worse outcome.
+    void window.piDesktop.sendQueue?.save(get().sendQueues)?.catch(() => undefined)
+  },
+  restoreSendQueues: async () => {
+    const stored = await window.piDesktop.sendQueue?.load()?.catch(() => ({})) ?? {}
+    if (Object.keys(stored).length === 0) return
+    // A queue restored for a chat this run cannot reach would sit there forever,
+    // so it is pruned against the chats that are actually open or listed.
+    const known = new Set<string>(Object.keys(get().sendQueues))
+    const activeRemote = get().activeRemoteRef
+    if (activeRemote) known.add(remoteQueueKey(activeRemote))
+    for (const session of get().sessionList) {
+      if (session.remote) known.add(remoteQueueKey(session.remote))
+      else if (session.path) known.add(localQueueKey(session.path, null))
+    }
+    const restored = pruneQueues(stored, known)
+    if (Object.keys(restored).length === 0) return
+    set({ sendQueues: { ...restored, ...get().sendQueues } })
+  },
+  queuePrompt: (key, text, attachments) => {
+    set((state) => ({ sendQueues: withQueued(state.sendQueues, key, { id: generateId(), text, attachments }) }))
+    get().persistSendQueues()
+  },
+  removeQueuedPrompt: (key, promptId) => {
+    set((state) => ({ sendQueues: withoutQueued(state.sendQueues, key, promptId) }))
+    get().persistSendQueues()
+  },
+  sendQueuedPromptNow: async (key, promptId) => {
+    // sendPrompt reaches the chat on screen only. A queued message for another
+    // chat is left where it is: sending it here would put its text into this
+    // conversation, which is what an earlier workspace-keyed queue did.
+    if (key !== activeQueueKey(get())) return
+    const queued = get().sendQueues[key]?.find((prompt) => prompt.id === promptId)
     if (!queued) return
-    get().removeQueuedPrompt(workspaceId, promptId)
+    get().removeQueuedPrompt(key, promptId)
     const { message, options } = composePrompt(queued.text, queued.attachments)
     await get().sendPrompt(message, options)
   },
@@ -1636,6 +1734,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
     historyLoadingRuntime = null
     set({
       messages: [],
+      // promptHistory is recomputed from the new transcript by whoever loads it.
       promptHistory: [],
       subagentTasks: [],
       subagentEventsSupported: false,
@@ -2340,7 +2439,13 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
           )
           const sessionFile = get().sessionState?.sessionFile
           if (sessionFile) cacheTranscript(sessionFile, { messages: finalMessages, total })
-          set({ messages: finalMessages, sessionLoading: false })
+          // Recall belongs to the chat, so it comes from the chat's own turns.
+          set({
+            messages: finalMessages,
+            sessionLoading: false,
+            promptHistory: promptHistoryFrom(finalMessages),
+            activeChatKey: localQueueKey(sessionFile ?? null, get().activeSessionRuntimeId),
+          })
         } else {
           set({ sessionLoading: false })
         }
@@ -2547,10 +2652,13 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
     try {
       const result = await window.piDesktop.relay.openSession(ref)
       if (gen !== sessionLoadGeneration) return
+      const remoteMessages = relayEventsToDisplayMessages(result.events)
       set({
         sessionLoading: false,
         activeRemoteRef: result.ref,
-        messages: relayEventsToDisplayMessages(result.events),
+        messages: remoteMessages,
+        promptHistory: promptHistoryFrom(remoteMessages),
+        activeChatKey: remoteQueueKey(result.ref),
         composerFocusRequested: true,
       })
     } catch (err) {
@@ -3064,7 +3172,20 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
           set({ reattachedMidTurn: false })
           void enqueueAttachBackfill(get)
         }
-        settleSendQueue(set, get, turnFailed)
+        {
+          // A background turn's end names its own chat; settling the visible one
+          // would send the wrong conversation's queued message.
+          const ended = (event as { backgroundWorkspaceId?: string }).backgroundWorkspaceId
+          if (ended) {
+            const key = Object.keys(get().sendQueues).find((candidate) =>
+              candidate.startsWith('local:') || candidate.startsWith('local-rt:')
+                ? get().sessionRuntimes[candidate.replace(/^local-rt:/, '')]?.workspaceId === ended
+                : false)
+            if (key) settleSendQueue(set, get, turnFailed, key)
+          } else {
+            settleSendQueue(set, get, turnFailed)
+          }
+        }
         break
 
       case 'tool_execution_start':
@@ -3831,9 +3952,10 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
       await get().loadWorkspaces()
       get().saveComposerDraft(workspaceId, EMPTY_COMPOSER_DRAFT)
       set((state) => ({
-        sendQueues: withoutWorkspaceQueue(state.sendQueues, workspaceId),
+        sendQueues: withoutProjectQueues(state.sendQueues, workspaceId, state.sessionRuntimes),
         heldSendQueues: state.heldSendQueues.filter((id) => id !== workspaceId),
       }))
+      get().persistSendQueues()
       adoptMainSideActivation(get, set, previousActiveId)
       if (result.preservedWorktreePaths) {
         get().addMessage({

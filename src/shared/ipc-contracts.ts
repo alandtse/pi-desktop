@@ -61,6 +61,8 @@ export const IPC_CHANNELS = {
 
   // Settings
   SETTINGS_GET_ALL: 'settings:get-all',
+  SEND_QUEUE_LOAD: 'send-queue:load',
+  SEND_QUEUE_SAVE: 'send-queue:save',
   SETTINGS_SAVE: 'settings:save',
   I18N_GET_ENVIRONMENT: 'i18n:get-environment',
 
@@ -494,6 +496,14 @@ export interface PiAgentStartEvent {
 export interface PiAgentEndEvent {
   type: 'agent_end'
   messages: unknown[]
+  /**
+   * Set when this turn ended in a chat that is not on screen.
+   *
+   * The renderer settles a chat's send queue when that chat's turn ends, so the
+   * end of a background turn has to say which chat it belongs to; without this
+   * the queue of a background chat would never drain.
+   */
+  backgroundWorkspaceId?: string
 }
 
 /** The text and thinking of the assistant message a Pi process is streaming, so far. */
@@ -1126,6 +1136,21 @@ export interface PromptImage {
 export type AttachmentReadResult =
   | { kind: 'image'; name: string; image: PromptImage }
   | { kind: 'text'; name: string; content: string }
+
+/**
+ * A staged attachment, kept in a shape both the composer and the queue on disk
+ * can hold: inlined text, or bytes Pi takes as an image block.
+ */
+export type QueuedAttachment =
+  | { kind: 'text'; name: string; path: string; content: string }
+  | { kind: 'image'; name: string; path: string; image: PromptImage }
+
+/** A message handed over while the agent was busy, waiting for its turn to end. */
+export interface QueuedPrompt {
+  id: string
+  text: string
+  attachments: QueuedAttachment[]
+}
 
 /** Options for the native open dialog. Defaults to picking a directory. */
 export interface OpenDialogOptions {

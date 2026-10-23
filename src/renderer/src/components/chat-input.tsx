@@ -19,7 +19,7 @@ import {
   type FileSearchResult,
 } from '../../../shared/ipc-contracts'
 import { composePrompt } from '../utils/compose-prompt'
-import type { QueuedPrompt } from '../send-queue'
+import { localQueueKey, remoteQueueKey, type QueuedPrompt } from '../send-queue'
 import { SendQueueList } from './send-queue-list'
 import { TurnActivityLine } from './turn-activity-line'
 import { isPointerMovement } from '../utils/pointer-movement'
@@ -98,8 +98,12 @@ export function ChatInput({ dropZoneRef }: ChatInputProps): React.JSX.Element {
   const queuePrompt = useAppStore((s) => s.queuePrompt)
   const removeQueuedPrompt = useAppStore((s) => s.removeQueuedPrompt)
   const sendQueuedPromptNow = useAppStore((s) => s.sendQueuedPromptNow)
-  const queuedPrompts = useAppStore((s) => s.sendQueues[workspaceId] ?? NO_QUEUED_PROMPTS)
-  const queueHeld = useAppStore((s) => s.heldSendQueues.includes(workspaceId))
+  // The queue belongs to the chat on screen, not to its project: two chats in
+  // one project each keep their own, and a background chat's queue is not shown
+  // here because its message is not for this conversation.
+  const queueKey = useAppStore((s) => (s.activeRemoteRef ? remoteQueueKey(s.activeRemoteRef) : localQueueKey(s.sessionState?.sessionFile ?? null, s.activeSessionRuntimeId)))
+  const queuedPrompts = useAppStore((s) => s.sendQueues[queueKey] ?? NO_QUEUED_PROMPTS)
+  const queueHeld = useAppStore((s) => s.heldSendQueues.includes(queueKey))
 
   // Prompt-history recall (shell-style ↑/↓). `historyIndex` is NO_RECALLED_PROMPT
   // while editing a fresh draft; while navigating it points into
@@ -389,9 +393,9 @@ export function ChatInput({ dropZoneRef }: ChatInputProps): React.JSX.Element {
         return
       }
       const taken = takeComposerContent(message)
-      if (taken) queuePrompt(workspaceId, message, taken)
+      if (taken) queuePrompt(queueKey, message, taken)
     },
-    [handleSendNow, takeComposerContent, queuePrompt, workspaceId]
+    [handleSendNow, takeComposerContent, queuePrompt, queueKey]
   )
 
   // Put a queued message back in the composer to change it. Text already in
@@ -400,14 +404,14 @@ export function ChatInput({ dropZoneRef }: ChatInputProps): React.JSX.Element {
     (prompt: QueuedPrompt) => {
       const ta = textareaRef.current
       if (!ta) return
-      removeQueuedPrompt(workspaceId, prompt.id)
+      removeQueuedPrompt(queueKey, prompt.id)
       ta.value = ta.value.trim() ? `${prompt.text}\n${ta.value}` : prompt.text
       resizeTextarea(ta)
       ta.focus()
       ta.setSelectionRange(prompt.text.length, prompt.text.length)
       for (const attachment of prompt.attachments) addAttachment(attachment)
     },
-    [removeQueuedPrompt, workspaceId, resizeTextarea, addAttachment]
+    [removeQueuedPrompt, queueKey, resizeTextarea, addAttachment]
   )
 
   const handleAbort = useCallback(() => {
@@ -666,9 +670,9 @@ export function ChatInput({ dropZoneRef }: ChatInputProps): React.JSX.Element {
         <SendQueueList
           prompts={queuedPrompts}
           held={queueHeld}
-          onSendNow={(prompt) => void sendQueuedPromptNow(workspaceId, prompt.id)}
+          onSendNow={(prompt) => void sendQueuedPromptNow(queueKey, prompt.id)}
           onEdit={editQueuedPrompt}
-          onRemove={(prompt) => removeQueuedPrompt(workspaceId, prompt.id)}
+          onRemove={(prompt) => removeQueuedPrompt(queueKey, prompt.id)}
         />
         {/* Subagent strip sits on the top edge, inset ~5% each side so the pill
             width doesn't look like it grew with the fleet UI. */}

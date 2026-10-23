@@ -1,14 +1,13 @@
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { AlertCircle, Boxes, CheckCircle2, FolderOpen, GitBranch, Loader2, MessageSquarePlus, PanelLeft, Plus, Settings, X, XCircle } from 'lucide-react'
+import { AlertCircle, Boxes, CheckCircle2, FolderOpen, GitBranch, Laptop, Loader2, MessageSquarePlus, PanelLeft, Plus, Settings, X, XCircle } from 'lucide-react'
 import { clsx } from 'clsx'
 import { useAppStore } from '../store'
 import { useGlobalWorkflowOpen } from '../hooks'
-import { getSessionTitle } from '../utils/session-title'
-import { projectTabs as getProjectTabs, sessionTabs as getSessionTabs } from '../utils/tab-navigation'
+import { projectTabs as getProjectTabs } from '../utils/tab-navigation'
+import { isTabActive, sessionTabs as getSessionTabs } from '../utils/session-tabs'
 import { activeShortcuts } from '../utils/app-shortcuts'
 import { formatShortcut } from '../../../shared/keyboard-shortcuts'
-import { pathsEqual } from '../../../shared/path-compare'
 import { SessionRuntimeIndicator } from './session-runtime-indicator'
 import type { Workspace } from '../../../shared/ipc-contracts'
 
@@ -38,6 +37,8 @@ export function WorkspaceTabs(): React.JSX.Element {
   const activateWorkspace = useAppStore((state) => state.activateWorkspace)
   const switchSession = useAppStore((state) => state.switchSession)
   const closeSessionTab = useAppStore((state) => state.closeSessionTab)
+  const openRemoteSession = useAppStore((state) => state.openRemoteSession)
+  const activeRemoteRef = useAppStore((state) => state.activeRemoteRef)
   const removeWorkspace = useAppStore((state) => state.removeWorkspace)
   const createWorktreeTab = useAppStore((state) => state.createWorktreeTab)
   const setLinkedTaskDialog = useAppStore((state) => state.setLinkedTaskDialog)
@@ -53,9 +54,16 @@ export function WorkspaceTabs(): React.JSX.Element {
     () => getProjectTabs(workspaces, projectTabOrder),
     [workspaces, projectTabOrder]
   )
+  // Remote tabs are tabs too: the strip is built from open chats, not from
+  // local runtimes, so a session on the other machine sits beside them.
   const sessionTabs = useMemo(
-    () => getSessionTabs(sessionRuntimes, activeWorkspace?.id),
-    [activeWorkspace?.id, sessionRuntimes]
+    () => getSessionTabs({
+      runtimes: sessionRuntimes,
+      workspaceId: activeWorkspace?.id,
+      sessionList,
+      newSessionFallback: t('workspaceTabs.newSessionFallback'),
+    }),
+    [activeWorkspace?.id, sessionRuntimes, sessionList]
   )
 
   return (
@@ -255,16 +263,18 @@ export function WorkspaceTabs(): React.JSX.Element {
     {sessionTabs.length > 0 && (
       <div className="flex h-8 shrink-0 items-center gap-1 overflow-x-auto border-b border-border/70 px-2">
         <span className="mr-1 shrink-0 text-[10px] uppercase tracking-wide text-faint">{t('workspaceTabs.sessions')}</span>
-        {sessionTabs.map((runtime) => {
-          const session = sessionList.find((item) => runtime.sessionPath && pathsEqual(item.path, runtime.sessionPath))
-          const active = runtime.runtimeId === activeSessionRuntimeId || runtime.active
+        {sessionTabs.map((tab) => {
+          const active = isTabActive(tab, activeSessionRuntimeId, activeRemoteRef)
           return (
             <div
-              key={runtime.runtimeId}
+              key={tab.id}
               onAuxClick={(event) => {
                 if (event.button !== 1) return
+                // Only a local tab has a runtime to close; a remote session
+                // belongs to the other machine and is not ours to end.
+                if (tab.kind !== 'local' || !tab.runtime) return
                 event.preventDefault()
-                void closeSessionTab(runtime.runtimeId)
+                void closeSessionTab(tab.runtime.runtimeId)
               }}
               className={clsx(
                 'group flex min-w-0 max-w-[240px] shrink-0 items-center gap-0.5 rounded px-1 py-0.5 text-[11px] transition-colors',
@@ -274,28 +284,29 @@ export function WorkspaceTabs(): React.JSX.Element {
               <button
                 type="button"
                 onClick={() => {
-                  if (!runtime.sessionPath) return
                   setCurrentView('chat')
-                  void switchSession(runtime.sessionPath, activeWorkspace?.path)
+                  if (tab.kind === 'remote') { void openRemoteSession(tab.ref!); return }
+                  if (!tab.runtime?.sessionPath) return
+                  void switchSession(tab.runtime.sessionPath, activeWorkspace?.path)
                 }}
                 className="flex min-w-0 flex-1 items-center gap-1.5 px-1 py-0.5 text-left"
-                title={runtime.sessionPath ?? undefined}
+                title={tab.kind === 'remote' ? `${tab.ref?.hostname ?? ''} ${tab.ref?.roomId ?? ''}`.trim() : tab.runtime?.sessionPath ?? undefined}
                 aria-current={active ? 'page' : undefined}
               >
-                <SessionRuntimeIndicator runtime={runtime} />
-                <span className="truncate">
-                  {session ? getSessionTitle(session.name, session.sessionId, session.preview) : t('workspaceTabs.newSessionFallback')}
-                </span>
+                {tab.kind === 'remote' ? <Laptop size={11} className="shrink-0 text-faint" /> : tab.runtime ? <SessionRuntimeIndicator runtime={tab.runtime} /> : null}
+                <span className="truncate">{tab.title}</span>
               </button>
-              <button
-                type="button"
-                onClick={() => void closeSessionTab(runtime.runtimeId)}
-                className="shrink-0 rounded p-0.5 text-faint opacity-0 transition-all hover:bg-highlight-strong hover:text-primary group-hover:opacity-100"
-                title={t('workspaceTabs.closeSessionTab')}
-                aria-label={t('workspaceTabs.closeSessionTab')}
-              >
-                <X size={11} />
-              </button>
+              {tab.kind === 'local' && tab.runtime && (
+                <button
+                  type="button"
+                  onClick={() => void closeSessionTab(tab.runtime!.runtimeId)}
+                  className="shrink-0 rounded p-0.5 text-faint opacity-0 transition-all hover:bg-highlight-strong hover:text-primary group-hover:opacity-100"
+                  title={t('workspaceTabs.closeSessionTab')}
+                  aria-label={t('workspaceTabs.closeSessionTab')}
+                >
+                  <X size={11} />
+                </button>
+              )}
             </div>
           )
         })}

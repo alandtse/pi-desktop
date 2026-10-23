@@ -2,12 +2,17 @@ import { test, before, beforeEach } from 'node:test'
 import assert from 'node:assert/strict'
 import type { PiRpcEvent, Workspace } from '../../shared/ipc-contracts'
 import type { ComposerAttachment } from './store'
+import { localQueueKey } from './send-queue'
 
 // Prompts, steers and stops the store sent, in order.
 const calls: string[] = []
 const ACCEPTED = { type: 'response', command: 'prompt', success: true }
 const WORKSPACE_ID = 'ws-queue'
+const SESSION_FILE = '/sessions/queue-test.jsonl'
+const CHAT_KEY = localQueueKey(SESSION_FILE, null)
 const OTHER_WORKSPACE_ID = 'ws-other'
+const OTHER_SESSION_FILE = '/sessions/queue-other.jsonl'
+const OTHER_CHAT_KEY = localQueueKey(OTHER_SESSION_FILE, null)
 
 const piDesktopStub = {
   pi: {
@@ -33,6 +38,10 @@ const piDesktopStub = {
     getStats: async () => ({ success: true, data: null }),
     list: async () => [],
   },
+  sendQueue: {
+    load: async () => ({}),
+    save: async () => undefined,
+  },
 }
 
 type StoreModule = typeof import('./store')
@@ -56,6 +65,9 @@ beforeEach(() => {
     piStatus: 'running',
     piEngine: 'pi',
     activeWorkspace: { id: WORKSPACE_ID } as Workspace,
+    sessionState: { sessionFile: SESSION_FILE } as never,
+    activeChatKey: CHAT_KEY,
+    activeRemoteRef: null,
     sendQueues: {},
     heldSendQueues: [],
   })
@@ -70,12 +82,12 @@ async function settle(): Promise<void> {
   for (let i = 0; i < 10; i++) await new Promise((resolve) => setImmediate(resolve))
 }
 
-function queue(text: string, attachments: ComposerAttachment[] = [], workspaceId = WORKSPACE_ID): void {
-  useAppStore.getState().queuePrompt(workspaceId, text, attachments)
+function queue(text: string, attachments: ComposerAttachment[] = [], key = CHAT_KEY): void {
+  useAppStore.getState().queuePrompt(key, text, attachments)
 }
 
-function queuedTexts(workspaceId = WORKSPACE_ID): string[] {
-  return (useAppStore.getState().sendQueues[workspaceId] ?? []).map((prompt) => prompt.text)
+function queuedTexts(key = CHAT_KEY): string[] {
+  return (useAppStore.getState().sendQueues[key] ?? []).map((prompt) => prompt.text)
 }
 
 function endTurn(): void {
@@ -104,7 +116,7 @@ test('a stopped turn holds the queue until the user sends again', async () => {
   await settle()
   assert.deepEqual(calls, ['abort'])
   assert.deepEqual(queuedTexts(), ['waiting'])
-  assert.deepEqual(useAppStore.getState().heldSendQueues, [WORKSPACE_ID])
+  assert.deepEqual(useAppStore.getState().heldSendQueues, [CHAT_KEY])
 
   await useAppStore.getState().sendPrompt('new task')
   assert.deepEqual(useAppStore.getState().heldSendQueues, [])
@@ -120,7 +132,7 @@ test('a failed turn holds the queue, and a retry that works does not', async () 
   endTurn()
   await settle()
   assert.deepEqual(calls, [])
-  assert.deepEqual(useAppStore.getState().heldSendQueues, [WORKSPACE_ID])
+  assert.deepEqual(useAppStore.getState().heldSendQueues, [CHAT_KEY])
 
   useAppStore.setState({ heldSendQueues: [], isStreaming: true })
   emit({ type: 'agent_start' } as PiRpcEvent)
@@ -134,8 +146,8 @@ test('a failed turn holds the queue, and a retry that works does not', async () 
 test('Send now pushes a queued message into the running turn and takes it off the queue', async () => {
   queue('keep going')
   queue('later')
-  const [first] = useAppStore.getState().sendQueues[WORKSPACE_ID]
-  await useAppStore.getState().sendQueuedPromptNow(WORKSPACE_ID, first.id)
+  const [first] = useAppStore.getState().sendQueues[CHAT_KEY]
+  await useAppStore.getState().sendQueuedPromptNow(CHAT_KEY, first.id)
   assert.deepEqual(calls, ['steer:keep going'])
   assert.deepEqual(queuedTexts(), ['later'])
 })
@@ -150,15 +162,37 @@ test('a queued message keeps its files: text files go out inlined', async () => 
   assert.ok(calls[0].includes('Line one'))
 })
 
-test('only the active workspace queue goes out, and only for that workspace', async () => {
-  queue('elsewhere', [], OTHER_WORKSPACE_ID)
+test("another chat's queue is not sent by this chat's turn", async () => {
+  queue('elsewhere', [], OTHER_CHAT_KEY)
   endTurn()
   await settle()
   assert.deepEqual(calls, [])
-  const [elsewhere] = useAppStore.getState().sendQueues[OTHER_WORKSPACE_ID]
-  await useAppStore.getState().sendQueuedPromptNow(OTHER_WORKSPACE_ID, elsewhere.id)
+  const [elsewhere] = useAppStore.getState().sendQueues[OTHER_CHAT_KEY]
+  // Sending now would put this message in the chat on screen, so it is refused
+  // and the message stays queued for the chat it was written for.
+  await useAppStore.getState().sendQueuedPromptNow(OTHER_CHAT_KEY, elsewhere.id)
   assert.deepEqual(calls, [])
-  assert.deepEqual(queuedTexts(OTHER_WORKSPACE_ID), ['elsewhere'])
+  assert.deepEqual(queuedTexts(OTHER_CHAT_KEY), ['elsewhere'])
+})
+
+test("a background chat's turn end drains its own queue, not the visible chat's", async () => {
+  queue('mine', [], CHAT_KEY)
+  queue('theirs', [], OTHER_CHAT_KEY)
+  // The end of a turn in another chat carries the workspace it happened in; this
+  // chat has its own queue and must keep it.
+  emit({ type: 'agent_end', messages: [], backgroundWorkspaceId: OTHER_WORKSPACE_ID } as PiRpcEvent)
+  await settle()
+  assert.deepEqual(calls, [])
+  assert.deepEqual(queuedTexts(CHAT_KEY), ['mine'])
+  assert.deepEqual(queuedTexts(OTHER_CHAT_KEY), ['theirs'])
+})
+
+test('every change to the queue is written out for the next run', async () => {
+  useAppStore.getState().queuePrompt(CHAT_KEY, 'persist me', [])
+  await settle()
+  assert.deepEqual(useAppStore.getState().sendQueues[CHAT_KEY].map((prompt) => prompt.text), ['persist me'])
+  const written = useAppStore.getState().sendQueues
+  assert.ok(Object.prototype.hasOwnProperty.call(written, CHAT_KEY))
 })
 
 test('the activity clock starts with the turn and moves with every agent event', async () => {

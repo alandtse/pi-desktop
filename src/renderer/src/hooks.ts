@@ -624,6 +624,9 @@ export function useInitialize(): void {
       // background, Home included, so the chat shows what the next start
       // continues. The session-runtime running event hydrates it when ready.
       const resumed = await openLastSession().catch(() => false)
+      // A queue belongs to a chat, and a chat survives the app: restore what the
+      // last run left pending before the user can add to it.
+      void useAppStore.getState().restoreSendQueues().catch(() => undefined)
 
       if (openToHome) {
         // Without a resumed session, Pi starts lazily on first action from Home.
