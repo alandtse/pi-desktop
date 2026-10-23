@@ -154,3 +154,18 @@ test('the chats of the machine on screen are session tabs beside local chats', (
   // A chat is named by its session: the folder is the same for its siblings.
   assert.deepEqual(tabs.slice(0, 2).map((tab) => tab.title), ['alandtse', 'open-shaders'])
 })
+test('a local chat does not stand beside the chats of a remote machine', () => {
+  // The strip is the chats of the project ON SCREEN. While a remote machine is
+  // on screen its rows are the whole strip; the local project is not shown, so
+  // one of its chats appearing here was an extra tab that opened the wrong view.
+  const runtimes = { local: runtime('local', 'project', '/local') }
+  const machine = remoteProjectTabs([remoteRow('room-a', '/Users/alandtse', 'alandtse', 'alandtse')])
+  const remoteOnly = sessionTabs({
+    runtimes,
+    workspaceId: undefined,
+    sessionList: [],
+    remoteRows: machine[0].rows,
+    newSessionFallback: 'New',
+  })
+  assert.deepEqual(remoteOnly.map((tab) => tab.id), ['remote:peer:room-a'])
+})

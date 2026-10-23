@@ -83,7 +83,10 @@ export function WorkspaceTabs(): React.JSX.Element {
   const sessionTabs = useMemo(
     () => getSessionTabs({
       runtimes: sessionRuntimes,
-      workspaceId: activeWorkspace?.id,
+      // The strip shows the chats of the project on screen. When that project
+      // is another machine, the local project's chats are not on screen, so
+      // they must not appear beside the remote ones as an extra tab.
+      workspaceId: activeRemoteProject ? undefined : activeWorkspace?.id,
       // Local chats are named from their rows; the relay's rows are passed
       // separately so they cannot leak into the local list.
       sessionList,
