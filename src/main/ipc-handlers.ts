@@ -32,6 +32,9 @@ import { registerSubagentHandlers } from './ipc/subagent-handlers'
 import { registerRelayHandlers } from './ipc/relay-handlers'
 import { registerShutdownTurnsHandler } from './ipc/shutdown-turns-handlers'
 import { createTurnTracker } from './turn-tracker'
+import { writeShutdownTurnsSync } from './shutdown-turns'
+import { getGuiDataDir } from './app-data-paths'
+import { appLog } from './app-log'
 import { createRelayBridge } from './relay/relay-wiring'
 import type { RelaySessionBridge } from './relay/relay-bridge'
 import { wireWorkspaceActivity, type WindowControls } from './ipc/workspace-activity-wiring'
@@ -55,7 +58,17 @@ export function registerIpcHandlers(
   const ctx = createIpcContext(workspaceManager)
   // Fed by the router and read by the quit path; see turn-tracker.ts for why a
   // live record beats inferring an interruption from the session file.
-  const turnTracker = createTurnTracker()
+  // Written as the state changes, not only on quit: a forced kill or a crash skips
+  // the quit hooks, and those are the cases a continuation recovers from.
+  const turnTracker = createTurnTracker(Date.now, {
+    onChange: (midTurn) => {
+      try {
+        writeShutdownTurnsSync(getGuiDataDir(), { recordedAt: new Date().toISOString(), midTurn })
+      } catch (error) {
+        appLog.warn('continue', 'Could not record the mid-turn chats', error)
+      }
+    },
+  })
 
   // Session runtime snapshots are separate from workspace activity: several
   // live Pi processes may share one project cwd.

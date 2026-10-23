@@ -1,11 +1,12 @@
 /**
- * Tracks which chats are mid-turn right now, so a quit can record it.
+ * Tracks which chats are mid-turn, and keeps that on disk as it changes.
  *
- * This is the live counterpart to `shutdown-turns.ts`: the router feeds every
- * manager's events here, and the quit path asks for a snapshot. It is separate
- * from the file-based check because the file cannot tell a turn the app's own
- * quit cut short from one the user simply stopped, while this can — it observes
- * the turn boundaries directly.
+ * Persisting continuously rather than only on quit is deliberate: a quit is the
+ * one moment least likely to run. Restarting via a forced kill, a crash, or a
+ * deploy script that terminates the process all skip the quit hooks entirely, and
+ * those are exactly the cases a continuation is meant to recover from. Writing
+ * when the state changes means the record on disk is accurate whether the app
+ * exits cleanly or not.
  */
 import type { PiRpcEvent } from '../shared/ipc-contracts'
 
@@ -13,7 +14,7 @@ import type { PiRpcEvent } from '../shared/ipc-contracts'
 interface TurnState {
   /** Session file the manager is running, captured when the turn started. */
   sessionPath: string
-  /** ISO timestamp of the `agent_start` that opened the turn. */
+  /** ISO timestamp of the most recent activity in the turn. */
   startedAt: string
 }
 
@@ -26,6 +27,11 @@ export interface TurnTracker {
   forget(sessionPath: string | null): void
 }
 
+export interface TurnTrackerOptions {
+  /** Called whenever the record changes, with the chats currently working. */
+  onChange?: (midTurn: Record<string, string>) => void
+}
+
 /**
  * A turn that has recorded no activity for longer than this is treated as gone.
  *
@@ -36,41 +42,72 @@ export interface TurnTracker {
  */
 export const STALE_TURN_MS = 10 * 60 * 1000
 
-export function createTurnTracker(now: () => number = Date.now): TurnTracker {
-  const active = new Map<string, TurnState>()
+/**
+ * How often activity inside a running turn refreshes the record.
+ *
+ * A turn boundary is written immediately, because that is the fact the record
+ * exists for. Refreshing on every token would write thousands of times a minute
+ * to convey one bit — "still working" — so it is throttled to comfortably under
+ * the staleness window.
+ */
+export const RECORD_REFRESH_MS = 15 * 1000
 
-  const forgetStale = (): void => {
+export function createTurnTracker(
+  now: () => number = Date.now,
+  options: TurnTrackerOptions = {},
+): TurnTracker {
+  const active = new Map<string, TurnState>()
+  let lastRefresh = 0
+
+  const snapshot = (): Record<string, string> => {
     const cutoff = now() - STALE_TURN_MS
+    const record: Record<string, string> = {}
     for (const [path, state] of active) {
-      if (Date.parse(state.startedAt) < cutoff) active.delete(path)
+      if (Date.parse(state.startedAt) < cutoff) continue
+      record[path] = state.startedAt
     }
+    return record
+  }
+
+  const announce = (): void => {
+    lastRefresh = now()
+    options.onChange?.(snapshot())
   }
 
   return {
     observe(event, sessionPath) {
       if (!sessionPath) return
+
       if (event.type === 'agent_start') {
         active.set(sessionPath, { sessionPath, startedAt: new Date(now()).toISOString() })
+        // A turn beginning is the fact this record exists to carry: written at
+        // once so a kill one second later still leaves an accurate record.
+        announce()
         return
       }
-      // Every other event from a live turn refreshes it, so a slow tool call does
-      // not age a working chat out of the record.
-      if (active.has(sessionPath)) {
-        const entry = active.get(sessionPath)!
-        active.set(sessionPath, { ...entry, startedAt: new Date(now()).toISOString() })
+
+      if (event.type === 'agent_end') {
+        active.delete(sessionPath)
+        // A finished turn must leave no trace, or a later start would offer to
+        // continue a conversation that already completed.
+        announce()
+        return
       }
-      if (event.type === 'agent_end') active.delete(sessionPath)
+
+      // Activity inside a live turn keeps it from ageing out, but is written at
+      // most once per interval.
+      if (!active.has(sessionPath)) return
+      active.set(sessionPath, { sessionPath, startedAt: new Date(now()).toISOString() })
+      if (now() - lastRefresh >= RECORD_REFRESH_MS) announce()
     },
 
     midTurn() {
-      forgetStale()
-      const record: Record<string, string> = {}
-      for (const [path, state] of active) record[path] = state.startedAt
-      return record
+      return snapshot()
     },
 
     forget(sessionPath) {
-      if (sessionPath) active.delete(sessionPath)
+      if (!sessionPath) return
+      if (active.delete(sessionPath)) announce()
     },
   }
 }

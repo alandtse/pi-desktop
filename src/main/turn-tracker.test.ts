@@ -5,12 +5,47 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import { STALE_TURN_MS, createTurnTracker } from './turn-tracker'
+import { RECORD_REFRESH_MS, STALE_TURN_MS, createTurnTracker } from './turn-tracker'
 
 const START = { type: 'agent_start' } as never
 const END = { type: 'agent_end' } as never
 const ACTIVITY = { type: 'message_start' } as never
 
+
+test('a turn beginning is announced at once, so a kill right after it still records', () => {
+  // The failure this guards: recording only on quit loses everything when the
+  // process is killed, a crash, or a deploy terminates it — the exact cases a
+  // continuation exists to recover from.
+  const writes: Record<string, string>[] = []
+  const tracker = createTurnTracker(() => 1000, { onChange: (record) => writes.push(record) })
+  tracker.observe(START, '/sessions/a.jsonl')
+  assert.deepEqual(Object.keys(writes[0] ?? {}), ['/sessions/a.jsonl'])
+})
+
+test('a finished turn is announced so the disk stops naming it', () => {
+  const writes: Record<string, string>[] = []
+  const tracker = createTurnTracker(() => 1000, { onChange: (record) => writes.push(record) })
+  tracker.observe(START, '/sessions/a.jsonl')
+  tracker.observe(END, '/sessions/a.jsonl')
+  assert.deepEqual(writes.at(-1), {}, 'the last write must not still name the finished turn')
+})
+
+test('activity inside a turn does not write on every event', () => {
+  // A token stream emits thousands of events a minute to convey one bit.
+  let clock = 1000
+  const writes: Record<string, string>[] = []
+  const tracker = createTurnTracker(() => clock, { onChange: (record) => writes.push(record) })
+  tracker.observe(START, '/sessions/a.jsonl')
+  const afterStart = writes.length
+  for (let i = 0; i < 50; i++) {
+    clock += 100
+    tracker.observe(ACTIVITY, '/sessions/a.jsonl')
+  }
+  assert.equal(writes.length, afterStart, 'five seconds of activity writes nothing')
+  clock += RECORD_REFRESH_MS
+  tracker.observe(ACTIVITY, '/sessions/a.jsonl')
+  assert.equal(writes.length, afterStart + 1, 'past the interval it refreshes once')
+})
 test('a chat is remembered from the start of its turn until the turn ends', () => {
   const tracker = createTurnTracker(() => 1000)
   tracker.observe(START, '/sessions/a.jsonl')
