@@ -62,6 +62,7 @@ export function ChatPanel(): React.JSX.Element {
   // the project picker is for starting work on THIS machine, so showing it over
   // a remote session reads as "nothing opened".
   const activeRemoteRef = useAppStore((state) => state.activeRemoteRef)
+  const remoteHistory = useAppStore((state) => state.remoteHistory)
   const isStreaming = useAppStore((state) => state.isStreaming)
   const reattachedMidTurn = useAppStore((state) => state.reattachedMidTurn)
   // Drive message-list bottom padding from the real floating composer height so
@@ -376,6 +377,17 @@ export function ChatPanel(): React.JSX.Element {
                       </div>
                     ) : (
                       <NowContext.Provider value={now}>
+                        {remoteHistory && remoteHistory.shown > 0 && (
+                          // How much of the conversation this window holds. The
+                          // paired Pi reports whether it truncated but never the
+                          // total it held, so the count says "N+" instead of
+                          // inventing a denominator it cannot know.
+                          <div className="mx-auto flex items-center justify-center pb-2 pt-3 text-xs text-faint">
+                            {remoteHistory.truncated
+                              ? t('chat.remoteHistoryPartial', { count: remoteHistory.shown })
+                              : t('chat.remoteHistoryComplete', { count: remoteHistory.shown })}
+                          </div>
+                        )}
                         <div
                           className={clsx('mx-auto px-4 pt-6', messageColumn)}
                           style={{ paddingBottom: composerPadPx }}

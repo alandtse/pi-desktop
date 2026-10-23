@@ -107,6 +107,8 @@
       "responseWillAppear": "回答完成后会立即显示在这里。",
       "stillWorking": "{{agent}} 仍在该会话中工作。"
     },
+    "remoteHistoryComplete_other": "来自另一台机器的 {{count}} 轮",
+    "remoteHistoryPartial_other": "来自另一台机器的 {{count}}+ 轮",
     "scrollToBottom": "滚动到底部",
     "search": {
       "closeWithShortcut": "关闭（Esc）",
@@ -1771,6 +1773,7 @@
       "notAFolder": "无法作为项目打开 — 不是文件夹：{{path}}",
       "notGitRepository": "此项目不是 Git 仓库。要另开对话请使用“新建会话”，或打开 Git 项目以使用隔离标签页。",
       "openFolderError": "打开文件夹错误：{{detail}}",
+      "remoteHistoryTruncated_other": "仅显示最近的 {{count}} 轮。另一台机器限制了发送的历史长度（REMOTE_PI_SYNC_LIMIT，默认 30）；可在该机器上调高。",
       "removedPackage": "已移除 {{spec}}",
       "removePackageFailed": "移除失败",
       "removeWorkspaceError": "移除工作区错误：{{detail}}",
@@ -1790,8 +1793,7 @@
       "updatedAllPackages": "已更新包。重启 Pi 以加载它们。",
       "updatedPackage": "已更新 {{spec}}。重启 Pi 以加载它。",
       "updatePackageFailed": "更新失败",
-      "writeFailed": "写入失败",
-      "remoteHistoryTruncated": "仅显示最近的 {{count}} 轮。另一台机器限制了发送的历史长度（REMOTE_PI_SYNC_LIMIT，默认 30）；可在该机器上调高。"
+      "writeFailed": "写入失败"
     },
     "promptsWaiting_other": "{{count}} 个 Pi 询问待回应"
   },

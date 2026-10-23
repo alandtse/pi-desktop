@@ -498,6 +498,14 @@ interface AppState {
    * under a second key and never drained.
    */
   activeChatKey: string
+  /**
+   * How much of the remote transcript the other machine actually sent.
+   *
+   * `null` for a local chat. The Pi reports whether it truncated, but never how
+   * many events it had in total, so the counter in the transcript header can
+   * only promise `1 / N+` when `truncated` is true rather than invent a total.
+   */
+  remoteHistory: { shown: number; truncated: boolean } | null
   /** Writes the queue so a restart resumes it; called after every change. */
   persistSendQueues: () => void
   /** Loads what a previous run left pending. */
@@ -1564,6 +1572,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
   sendQueues: {},
   heldSendQueues: [],
   activeChatKey: '',
+  remoteHistory: null,
   persistSendQueues: () => {
     // Fire-and-forget: the queue in memory is the truth. Persisting is a
     // convenience, so a write that cannot happen must never fail the action that
@@ -2296,6 +2305,8 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
           // composer would keep routing prompts to the other machine while the
           // transcript on screen belongs to a session on this one.
           activeRemoteRef: null,
+          // The relay depth belongs to the chat being left; a local one has no cap.
+          remoteHistory: null,
           // The dialog belongs to the runtime being left. Main retains its
           // origin and replays it when the user switches back.
           extensionUiRequest: null,
@@ -2670,6 +2681,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
         messages: remoteMessages,
         promptHistory: promptHistoryFrom(remoteMessages),
         activeChatKey: remoteQueueKey(result.ref),
+        remoteHistory: { shown: result.events.length, truncated: result.truncated },
         composerFocusRequested: true,
       })
     } catch (err) {

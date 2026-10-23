@@ -107,6 +107,10 @@
       "responseWillAppear": "The response appears here the moment it finishes.",
       "stillWorking": "{{agent}} is still working in this session."
     },
+    "remoteHistoryComplete_one": "{{count}} turn from the other machine",
+    "remoteHistoryComplete_other": "{{count}} turns from the other machine",
+    "remoteHistoryPartial_one": "{{count}}+ turn from the other machine",
+    "remoteHistoryPartial_other": "{{count}}+ turns from the other machine",
     "scrollToBottom": "Scroll to bottom",
     "search": {
       "closeWithShortcut": "Close (Esc)",
@@ -1805,6 +1809,8 @@
       "notAFolder": "Cannot open as project — not a folder: {{path}}",
       "notGitRepository": "This project is not a Git repository. Use New session for another conversation, or open a Git project for an isolated tab.",
       "openFolderError": "Open folder error: {{detail}}",
+      "remoteHistoryTruncated_one": "Showing the most recent {{count}} turn. The other machine caps how much history it sends (REMOTE_PI_SYNC_LIMIT, 30 by default); raise it there to see more.",
+      "remoteHistoryTruncated_other": "Showing the most recent {{count}} turns. The other machine caps how much history it sends (REMOTE_PI_SYNC_LIMIT, 30 by default); raise it there to see more.",
       "removedPackage": "Removed {{spec}}",
       "removePackageFailed": "Remove failed",
       "removeWorkspaceError": "Remove workspace error: {{detail}}",
@@ -1825,8 +1831,7 @@
       "updatedAllPackages": "Updated packages. Restart Pi to load them.",
       "updatedPackage": "Updated {{spec}}. Restart Pi to load it.",
       "updatePackageFailed": "Update failed",
-      "writeFailed": "Write failed",
-      "remoteHistoryTruncated": "Showing the most recent {{count}} turns. The other machine caps how much history it sends (REMOTE_PI_SYNC_LIMIT, 30 by default); raise it there to see more."
+      "writeFailed": "Write failed"
     },
     "promptsWaiting_one": "{{count}} Pi prompt waiting",
     "promptsWaiting_other": "{{count}} Pi prompts waiting"
