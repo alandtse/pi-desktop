@@ -1790,7 +1790,8 @@
       "updatedAllPackages": "已更新包。重启 Pi 以加载它们。",
       "updatedPackage": "已更新 {{spec}}。重启 Pi 以加载它。",
       "updatePackageFailed": "更新失败",
-      "writeFailed": "写入失败"
+      "writeFailed": "写入失败",
+      "remoteHistoryTruncated": "仅显示最近的 {{count}} 轮。另一台机器限制了发送的历史长度（REMOTE_PI_SYNC_LIMIT，默认 30）；可在该机器上调高。"
     },
     "promptsWaiting_other": "{{count}} 个 Pi 询问待回应"
   },

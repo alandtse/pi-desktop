@@ -2653,6 +2653,17 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
       const result = await window.piDesktop.relay.openSession(ref)
       if (gen !== sessionLoadGeneration) return
       const remoteMessages = relayEventsToDisplayMessages(result.events)
+      if (result.truncated) {
+        // The Pi caps a sync at its own REMOTE_PI_SYNC_LIMIT (30 by default) and
+        // the client cannot lift it: asking for more only earns the clamp. Say so
+        // once, here, because an unexplained short transcript reads as data loss.
+        remoteMessages.unshift({
+          id: generateId(),
+          role: 'system',
+          content: t('store.messages.remoteHistoryTruncated', { count: result.events.length }),
+          timestamp: Date.now(),
+        })
+      }
       set({
         sessionLoading: false,
         activeRemoteRef: result.ref,

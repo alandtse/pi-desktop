@@ -5,7 +5,7 @@ import { clsx } from 'clsx'
 import { useAppStore } from '../store'
 import { useGlobalWorkflowOpen } from '../hooks'
 import { projectTabs as getProjectTabs } from '../utils/tab-navigation'
-import { isTabActive, sessionTabs as getSessionTabs } from '../utils/session-tabs'
+import { isTabActive, remoteProjectTabs, sessionTabs as getSessionTabs } from '../utils/session-tabs'
 import { activeShortcuts } from '../utils/app-shortcuts'
 import { formatShortcut } from '../../../shared/keyboard-shortcuts'
 import { SessionRuntimeIndicator } from './session-runtime-indicator'
@@ -45,6 +45,19 @@ export function WorkspaceTabs(): React.JSX.Element {
   const createNewSession = useAppStore((state) => state.createNewSession)
   const newSessionShortcut = useAppStore((state) => activeShortcuts(state).newSession)
   const setCurrentView = useAppStore((state) => state.setCurrentView)
+  /**
+   * Leaves a remote project for the local chat that is already open.
+   *
+   * A remote project tab and a local one are peers in this row, so choosing the
+   * local one has to let go of the remote binding — otherwise two projects would
+   * read as active and the composer would keep talking to the other machine.
+   */
+  const getBackToLocalChat = (): void => {
+    const path = sessionState?.sessionFile
+    if (path) void switchSession(path, activeWorkspace?.path)
+    else useAppStore.setState({ activeRemoteRef: null })
+  }
+  const sessionState = useAppStore((state) => state.sessionState)
 
   const toolView = ['settings', 'packages', 'notes', 'skills', 'diagnostics'] as const
   const toolsActive =
@@ -54,13 +67,22 @@ export function WorkspaceTabs(): React.JSX.Element {
     () => getProjectTabs(workspaces, projectTabOrder),
     [workspaces, projectTabOrder]
   )
-  // Remote tabs are tabs too: the strip is built from open chats, not from
-  // local runtimes, so a session on the other machine sits beside them.
+  // A session on another machine belongs to a folder THERE, so it is a project
+  // tab of its own rather than a chat inside whichever local project is active.
+  const remoteProjects = useMemo(() => remoteProjectTabs(sessionList), [sessionList])
+  const activeRemoteProjectId = useMemo(() => {
+    if (!activeRemoteRef) return null
+    return remoteProjects.find((project) => project.rows.some((row) =>
+      row.ref.peer === activeRemoteRef.peer && row.ref.roomId === activeRemoteRef.roomId))?.id ?? null
+  }, [activeRemoteRef, remoteProjects])
+
+  // The strip under the project row is the chats in the project on screen.
   const sessionTabs = useMemo(
     () => getSessionTabs({
       runtimes: sessionRuntimes,
       workspaceId: activeWorkspace?.id,
-      sessionList,
+      // Only local chats: remote ones are project tabs now.
+      sessionList: [],
       newSessionFallback: t('workspaceTabs.newSessionFallback'),
     }),
     [activeWorkspace?.id, sessionRuntimes, sessionList]
@@ -149,6 +171,9 @@ export function WorkspaceTabs(): React.JSX.Element {
               type="button"
               onClick={() => {
                 setWorkflowPanelOpen(false)
+                // A remote project is a tab in this row too, so choosing a local
+                // one has to leave it: only one project is on screen.
+                if (activeRemoteRef) getBackToLocalChat()
                 if (workspace.id === activeWorkspace?.id) {
                   setCurrentView('chat')
                   return
@@ -193,6 +218,48 @@ export function WorkspaceTabs(): React.JSX.Element {
                 <X size={12} />
               </button>
             )}
+          </div>
+        )
+      })}
+
+      {remoteProjects.map((project) => {
+        const active = project.id === activeRemoteProjectId
+        // Opening a remote project shows the chat that is already driving it, or
+        // the first session it advertises: the tab is the folder, and a folder
+        // with no chat on screen would be a tab that goes nowhere.
+        const openProject = (): void => {
+          setWorkflowPanelOpen(false)
+          const driving = activeRemoteRef
+            ? project.rows.find((row) => row.ref.peer === activeRemoteRef.peer && row.ref.roomId === activeRemoteRef.roomId)
+            : undefined
+          const target = driving ?? project.rows[0]
+          if (target) void openRemoteSession(target.ref)
+        }
+        const working = project.rows.some((row) => row.session.contentState === 'non-empty')
+        return (
+          <div
+            key={project.id}
+            className={clsx(
+              'group relative flex h-9 min-w-[150px] max-w-[240px] shrink-0 select-none items-center gap-2 rounded-t-md border border-b-0 px-2.5 text-xs transition-colors',
+              active
+                ? 'border-border bg-surface text-primary'
+                : 'border-transparent text-muted hover:bg-surface/60 hover:text-secondary'
+            )}
+          >
+            <button
+              type="button"
+              onClick={openProject}
+              className="flex min-w-0 flex-1 items-center gap-2 text-left"
+              title={`${project.rows[0]?.session.projectPath ?? project.title}${project.hostname ? `
+${project.hostname}` : ''}`}
+            >
+              <Laptop size={13} className="shrink-0 text-faint" />
+              <span className="min-w-0 flex-1 truncate font-medium">{project.title}</span>
+              {project.hostname && (
+                <span className="shrink-0 truncate text-[10px] text-faint">{project.hostname}</span>
+              )}
+              {working && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-accent-fg" />}
+            </button>
           </div>
         )
       })}

@@ -1825,7 +1825,8 @@
       "updatedAllPackages": "Updated packages. Restart Pi to load them.",
       "updatedPackage": "Updated {{spec}}. Restart Pi to load it.",
       "updatePackageFailed": "Update failed",
-      "writeFailed": "Write failed"
+      "writeFailed": "Write failed",
+      "remoteHistoryTruncated": "Showing the most recent {{count}} turns. The other machine caps how much history it sends (REMOTE_PI_SYNC_LIMIT, 30 by default); raise it there to see more."
     },
     "promptsWaiting_one": "{{count}} Pi prompt waiting",
     "promptsWaiting_other": "{{count}} Pi prompts waiting"

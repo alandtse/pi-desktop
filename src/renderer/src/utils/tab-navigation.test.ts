@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { adjacentTabIndex, moveProjectTab, projectTabs } from './tab-navigation'
-import { sessionTabs } from './session-tabs'
+import { remoteProjectTabs, sessionTabs } from './session-tabs'
 import type { SessionListItem, SessionRuntimeInfo, Workspace } from '../../../shared/ipc-contracts'
 
 const workspace = (id: string, createdAt: number): Workspace => ({ id, createdAt, name: id, path: `/${id}`, lastActiveAt: 0, color: '' })
@@ -73,19 +73,48 @@ test('session order includes only open tabs in this project, newest first', () =
   )
 })
 
-test('a remote session is a tab beside the local ones', () => {
+const remoteRow = (roomId: string, cwd: string, projectName: string, name: string): SessionListItem => ({
+  path: `remote://peer/${roomId}`, name, preview: null, sessionId: roomId,
+  lastModified: 0, messageCount: 1, projectPath: cwd, projectName,
+  remote: { peer: 'peer', roomId, hostname: 'mac' },
+})
+
+test('a remote session is not a chat inside a local project', () => {
+  // A chat in the strip belongs to the project on screen; a session on the other
+  // machine belongs to a folder there, so putting it here said it was local.
   const runtimes = { local: runtime('local', 'project', '/local') }
   const rows: SessionListItem[] = [
     { path: '/local', name: 'Local chat', preview: null, sessionId: 'l1', lastModified: 0, messageCount: 0, projectPath: '/p', projectName: 'p' },
-    {
-      path: 'remote://peer/room', name: 'Mac chat', preview: null, sessionId: 'r1',
-      lastModified: 0, messageCount: 0, projectPath: '/Users/alandtse', projectName: 'alandtse',
-      remote: { peer: 'peer', roomId: 'room', hostname: 'mac' },
-    },
+    remoteRow('room', '/Users/alandtse', 'alandtse', 'Mac chat'),
   ]
   const tabs = sessionTabs({ runtimes, workspaceId: 'project', sessionList: rows, newSessionFallback: 'New' })
-  assert.deepEqual(tabs.map((tab) => tab.kind), ['local', 'remote'])
-  assert.equal(tabs[1].title, 'Mac chat')
-  assert.equal(tabs[1].runtime, null)
-  assert.equal(tabs[1].ref?.roomId, 'room')
+  assert.deepEqual(tabs.map((tab) => tab.id), ['local'])
+})
+
+test('the sessions of one remote folder form one project tab', () => {
+  // Two sessions from the same folder are two chats in one project, exactly as
+  // they would be locally.
+  const projects = remoteProjectTabs([
+    remoteRow('room-a', '/Users/alandtse', 'alandtse', 'alandtse'),
+    remoteRow('room-b', '/Users/alandtse', 'alandtse', 'alandtse#2'),
+    remoteRow('room-c', '/Users/alandtse/open-shaders', 'open-shaders', 'open-shaders'),
+  ])
+  assert.equal(projects.length, 2)
+  assert.equal(projects[0].title, 'alandtse')
+  assert.deepEqual(projects[0].rows.map((row) => row.ref.roomId), ['room-a', 'room-b'])
+  assert.equal(projects[0].hostname, 'mac')
+  assert.equal(projects[1].title, 'open-shaders')
+  assert.deepEqual(projects[1].rows.map((row) => row.ref.roomId), ['room-c'])
+})
+
+test('a remote project tab is named after the folder, not the machine', () => {
+  const projects = remoteProjectTabs([remoteRow('room', 'C:/work/thing', 'thing', 'thing')])
+  assert.equal(projects[0].title, 'thing')
+  assert.equal(projects[0].id, 'remoteProject:peer:C:/work/thing')
+})
+
+test('a Windows folder path on the other machine still yields a folder name', () => {
+  // The roster can name a folder with backslashes; the tab shows its last part.
+  const projects = remoteProjectTabs([remoteRow('room', 'C:\\work\\thing', 'thing', 'thing')])
+  assert.equal(projects[0].title, 'thing')
 })
