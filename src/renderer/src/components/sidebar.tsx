@@ -420,7 +420,7 @@ export function Sidebar(): React.JSX.Element {
                   aria-label={t('sidebar.sessionRow.remoteBadge', {
                     host: machineDisplayName({
                       machineName: remoteRef.hostname,
-                      agentName: remote?.settings.pairedAgent?.agentName,
+                      machineAlias: remote?.settings.pairedAgent?.machineAlias,
                       peer: remoteRef.peer,
                     }),
                   })}
@@ -437,7 +437,7 @@ export function Sidebar(): React.JSX.Element {
               {remoteRef
                 ? machineDisplayName({
                     machineName: remoteRef.hostname,
-                    agentName: remote?.settings.pairedAgent?.agentName,
+                    machineAlias: remote?.settings.pairedAgent?.machineAlias,
                     peer: remoteRef.peer,
                   })
                 : formatRelativeTime(session.lastModified, Date.now())}
@@ -736,7 +736,7 @@ export function Sidebar(): React.JSX.Element {
               {t('sidebar.remote.heading', {
                 name: machineDisplayName({
                   machineName: remote?.settings.pairedAgent?.machineName,
-                  agentName: remote?.settings.pairedAgent?.agentName,
+                  machineAlias: remote?.settings.pairedAgent?.machineAlias,
                   peer: remote?.settings.pairedAgent?.pubkey,
                 }),
               })}

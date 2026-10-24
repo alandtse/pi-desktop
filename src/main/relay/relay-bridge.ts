@@ -148,6 +148,28 @@ export class RelaySessionBridge {
     return agent
   }
 
+  /**
+   * Renames the paired machine as this desktop shows it.
+   *
+   * Written to both stores because they are what the panel and the rows read:
+   * the peer file is the durable record of the pairing, and the settings copy is
+   * what the status payload carries. An empty name clears the alias so the
+   * reported hostname (or the key) shows again.
+   */
+  async setMachineAlias(alias: string): Promise<RelayStatus> {
+    const trimmed = alias.trim()
+    const settings = await this.deps.settings.read()
+    const agent = settings.relay.pairedAgent
+    if (!agent) return this.getStatus()
+    const next: PairedRelayAgent = trimmed === ''
+      ? omitAlias(agent)
+      : { ...agent, machineAlias: trimmed }
+    await this.deps.peers.save(next)
+    await this.deps.settings.write({ relay: { ...settings.relay, pairedAgent: next } })
+    await this.rebuild()
+    return this.getStatus()
+  }
+
   async unpair(): Promise<RelayStatus> {
     await this.deps.peers.save(null)
     const settings = await this.deps.settings.read()
@@ -395,4 +417,10 @@ function toRemoteSessionRow(
 /** A stable, unique stand-in for a session file path. Never used as a real path. */
 function remoteSessionPath(peer: string, roomId: string): string {
   return `remote://${peer}/${roomId}`
+}
+
+/** Drops an empty alias so a cleared name does not shadow the reported hostname. */
+function omitAlias(agent: PairedRelayAgent): PairedRelayAgent {
+  const { machineAlias: _cleared, ...rest } = agent
+  return rest
 }

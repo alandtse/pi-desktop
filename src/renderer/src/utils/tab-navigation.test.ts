@@ -176,18 +176,31 @@ test('a machine is named the same way wherever it is shown', () => {
   // The tab and the sidebar heading drifted: the tab used the machine's hostname
   // while the heading used the Pi's agent name, which names a session and repeats
   // across a machine's sessions. Both now call this, so they cannot disagree.
-  const reported = { machineName: 'MacBookPro.lan', agentName: 'open-shaders', peer: 'hKqfHH3rUAvSuwGI9yam2BkM5DCiiGlIgs53wFR+SiQ=' }
-  assert.equal(machineDisplayName(reported), 'MacBookPro.lan', 'the hostname wins when the Pi reported one')
+  const peer = 'hKqfHH3rUAvSuwGI9yam2BkM5DCiiGlIgs53wFR+SiQ='
+  assert.equal(
+    machineDisplayName({ machineName: 'MacBookPro.lan', peer }),
+    'MacBookPro.lan',
+    'the reported hostname wins',
+  )
 
-  // An older pairing has no hostname; the agent name is then the best real name.
-  assert.equal(machineDisplayName({ agentName: 'open-shaders', peer: reported.peer }), 'open-shaders')
+  // A name the user typed outranks everything, because it is the only input that
+  // is available even when the pairing predates the hostname field.
+  assert.equal(
+    machineDisplayName({ machineAlias: ' Mac ', machineName: 'MacBookPro.lan', peer }),
+    'Mac',
+    'a typed alias wins over the reported hostname',
+  )
+  assert.equal(machineDisplayName({ machineAlias: 'Mac', peer }), 'Mac', 'an alias stands alone')
 
-  // A folder-shaped agent name is not a machine name — this is the open-shaders
-  // label the user reported as wrong for the whole machine.
-  assert.equal(machineDisplayName({ agentName: '/Users/alandtse/open-shaders', peer: reported.peer }), 'Paired Pi hKqfHH3r')
+  // The Pi's agent name must never be used: it names a session, so one machine
+  // showed up as "open-shaders" — the label the user reported as wrong.
+  assert.equal(
+    machineDisplayName({ peer }),
+    'Paired Pi hKqfHH3r',
+    'a pairing with no hostname falls back to the key, not the session name',
+  )
 
   // Nothing but a key: say so rather than showing a bare token as if it were a name.
-  assert.equal(machineDisplayName({ peer: reported.peer }), 'Paired Pi hKqfHH3r')
   assert.equal(machineDisplayName({}), 'remote')
 })
 

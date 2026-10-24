@@ -11,7 +11,7 @@ const BUTTON_CLASS =
 const FIELD_CLASS =
   'w-full rounded-md border border-border bg-surface px-2 py-1 font-mono text-xs text-primary outline-none focus:border-border-strong'
 
-type BusyAction = 'url' | 'pair' | 'unpair' | 'rooms' | 'select'
+type BusyAction = 'url' | 'pair' | 'unpair' | 'rooms' | 'select' | 'alias'
 
 /**
  * Remote Pi relay settings: point this desktop at a relay, pair with a Pi on
@@ -22,6 +22,7 @@ export function RelaySettings(): React.JSX.Element {
   const [status, setStatus] = useState<RelayStatus | null>(null)
   const [urlDraft, setUrlDraft] = useState('')
   const [pairDraft, setPairDraft] = useState('')
+  const [aliasDraft, setAliasDraft] = useState('')
   const [busy, setBusy] = useState<BusyAction | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
@@ -35,6 +36,11 @@ export function RelaySettings(): React.JSX.Element {
   }, [])
 
   useEffect(() => window.piDesktop.relay.onStatus(setStatus), [])
+
+  // Show the stored name in the box, so saving an edit does not start from blank.
+  useEffect(() => {
+    setAliasDraft(status?.settings.pairedAgent?.machineAlias ?? '')
+  }, [status?.settings.pairedAgent?.machineAlias])
 
   // Offer what the Pi on this machine already uses. Detection never writes, so
   // opening Settings cannot repoint a relay the user did not choose here.
@@ -73,6 +79,16 @@ export function RelaySettings(): React.JSX.Element {
         return window.piDesktop.relay.status()
       }),
     [run, pairDraft, t],
+  )
+
+  const renameMachine = useCallback(
+    () =>
+      run('alias', async () => {
+        const next = await window.piDesktop.relay.setMachineAlias(aliasDraft)
+        setNotice(t('settings.relay.pair.renamed'))
+        return next
+      }),
+    [run, aliasDraft, t],
   )
 
   const unpair = useCallback(
@@ -160,21 +176,48 @@ export function RelaySettings(): React.JSX.Element {
         <div className="text-sm text-primary">{t('settings.relay.pair.label')}</div>
         <div className="text-xs text-dim">{t('settings.relay.pair.description')}</div>
         {paired ? (
-          <div className="flex items-center justify-between gap-2 rounded-md border border-border bg-surface px-2 py-1">
-            <div className="flex flex-col">
-              <span className="text-xs text-primary">
-                {machineDisplayName({
-                  machineName: paired.machineName,
-                  agentName: paired.agentName,
-                  peer: paired.pubkey,
-                })}
-              </span>
-              <span className="font-mono text-[10px] text-dim">{paired.pubkey.slice(0, 16)}…</span>
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center justify-between gap-2 rounded-md border border-border bg-surface px-2 py-1">
+              <div className="flex flex-col">
+                <span className="text-xs text-primary">
+                  {machineDisplayName({
+                    machineName: paired.machineName,
+                    machineAlias: paired.machineAlias,
+                    peer: paired.pubkey,
+                  })}
+                </span>
+                <span className="font-mono text-[10px] text-dim">{paired.pubkey.slice(0, 16)}…</span>
+              </div>
+              <button type="button" className={BUTTON_CLASS} onClick={() => void unpair()} disabled={busy !== null}>
+                {busy === 'unpair' ? <Loader2 className="h-3 w-3 animate-spin" /> : <Unlink className="h-3 w-3" />}
+                {t('settings.relay.pair.unpair')}
+              </button>
             </div>
-            <button type="button" className={BUTTON_CLASS} onClick={() => void unpair()} disabled={busy !== null}>
-              {busy === 'unpair' ? <Loader2 className="h-3 w-3 animate-spin" /> : <Unlink className="h-3 w-3" />}
-              {t('settings.relay.pair.unpair')}
-            </button>
+            {/* The Pi reports its hostname only in pair_ok, so a pairing made
+                before that field existed can never learn it. Typing a name is
+                the only way to have a readable label without pairing again. */}
+            <label htmlFor="relay-machine-name" className="text-xs text-dim">
+              {t('settings.relay.pair.nameDescription')}
+            </label>
+            <div className="flex items-center gap-2">
+              <input
+                id="relay-machine-name"
+                className={FIELD_CLASS}
+                value={aliasDraft}
+                placeholder={t('settings.relay.pair.namePlaceholder')}
+                onChange={(event) => setAliasDraft(event.target.value)}
+                spellCheck={false}
+              />
+              <button
+                type="button"
+                className={BUTTON_CLASS}
+                onClick={() => void renameMachine()}
+                disabled={busy !== null}
+              >
+                {busy === 'alias' ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
+                {t('settings.relay.pair.rename')}
+              </button>
+            </div>
           </div>
         ) : (
           <div className="flex items-center gap-2">

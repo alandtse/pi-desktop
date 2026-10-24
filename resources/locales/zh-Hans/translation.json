@@ -1343,7 +1343,12 @@
         "label": "已配对 Pi",
         "pair": "配对",
         "success": "已配对。该 Pi 当前打开的会话会显示在下方。",
-        "unpair": "解除配对"
+        "unpair": "解除配对",
+        "renamed": "机器名称已保存。",
+        "nameLabel": "机器名称",
+        "nameDescription": "显示在侧边栏和标签页中。留空则使用配对机器上报的名称。",
+        "namePlaceholder": "例如 MacBook",
+        "rename": "重命名"
       },
       "sessions": {
         "empty": "已配对的 Pi 当前没有打开的会话。",

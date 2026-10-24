@@ -40,9 +40,6 @@ export interface RemoteProjectTab {
  */
 export const PEER_KEY_PREFIX_LENGTH = 8
 
-/** Windows path separator, as a named constant so no escaping is involved. */
-const SEPARATOR = String.fromCharCode(92)
-
 /** Groups the relay's session rows by the machine each one runs on. */
 export function remoteProjectTabs(sessionList: readonly SessionListItem[]): RemoteProjectTab[] {
   const groups = new Map<string, RemoteProjectTab>()
@@ -176,21 +173,22 @@ export function isTabActive(
  * agent name, which is the session's name and repeats across a machine's sessions.
  * One function for both is the only way they cannot disagree again.
  *
- * Order matters: the machine's own reported name, then the agent name (a real
- * name, if not a machine one), then the key prefix labelled as a key so a bare
- * token never reads as a name.
+ * Order matters: a name the user typed, then the machine's own reported name,
+ * then the key prefix labelled as a key so a bare token never reads as a name.
+ * The Pi's agent name is deliberately NOT used: it names a session, not a
+ * computer, which is why one machine showed up as "open-shaders".
  */
 export function machineDisplayName(source: {
+  machineAlias?: string
   machineName?: string
-  agentName?: string
   peer?: string
 }): string {
+  // A name the user typed beats anything reported: it is the one input that is
+  // always available and always what they expect to see.
+  const alias = source.machineAlias?.trim()
+  if (alias) return alias
   const machine = source.machineName?.trim()
   if (machine) return machine
-  const agent = source.agentName?.trim()
-  // A plain name (no path separator) is a real agent name; a path-shaped one is a
-  // folder default, which is not a machine name.
-  if (agent && !agent.includes('/') && !agent.includes(SEPARATOR)) return agent
   const peer = source.peer?.trim()
   if (peer) return `Paired Pi ${peer.slice(0, PEER_KEY_PREFIX_LENGTH)}`
   return 'remote'

@@ -1372,7 +1372,12 @@
         "label": "Paired Pi",
         "pair": "Pair",
         "success": "Paired. Any sessions the Pi has open appear below.",
-        "unpair": "Unpair"
+        "unpair": "Unpair",
+        "renamed": "Machine name saved.",
+        "nameLabel": "Machine name",
+        "nameDescription": "Shown in the sidebar and tabs. Leave empty to use the name the paired machine reports.",
+        "namePlaceholder": "e.g. MacBook",
+        "rename": "Rename"
       },
       "sessions": {
         "empty": "The paired Pi has no sessions open right now.",

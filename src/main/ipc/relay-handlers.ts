@@ -69,6 +69,11 @@ function registerRelayPairingHandlers(bridge: RelaySessionBridge): void {
     }
   })
 
+  ipcMain.handle(IPC_CHANNELS.RELAY_SET_MACHINE_ALIAS, async (event, alias: unknown) => {
+    assertTrustedSender(event)
+    return bridge.setMachineAlias(typeof alias === 'string' ? alias : '')
+  })
+
   ipcMain.handle(IPC_CHANNELS.RELAY_UNPAIR, async (event) => {
     assertTrustedSender(event)
     return bridge.unpair()

@@ -62,12 +62,22 @@ class FileRelayPeerPersistence implements RelayPeerPersistence {
   }
 }
 
-function toAgent(target: { pubkey: string; agentName: string; machineName?: string; roomId: string | null; pairedAt: string } | null): PairedRelayAgent | null {
+function toAgent(
+  target: {
+    pubkey: string
+    agentName: string
+    machineName?: string
+    machineAlias?: string
+    roomId: string | null
+    pairedAt: string
+  } | null,
+): PairedRelayAgent | null {
   if (!target) return null
   return {
     pubkey: target.pubkey,
     agentName: target.agentName,
     machineName: target.machineName,
+    machineAlias: target.machineAlias,
     roomId: target.roomId,
     pairedAt: target.pairedAt,
   }
@@ -78,6 +88,7 @@ function toTarget(agent: PairedRelayAgent) {
     pubkey: agent.pubkey,
     agentName: agent.agentName,
     machineName: agent.machineName,
+    machineAlias: agent.machineAlias,
     roomId: agent.roomId,
     pairedAt: agent.pairedAt,
   }

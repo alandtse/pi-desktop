@@ -312,6 +312,8 @@ interface PiDesktopAPI {
     setUrl(url: string | null): Promise<RelayStatus>
     pair(pairingUri: string): Promise<PairedRelayAgent>
     unpair(): Promise<RelayStatus>
+    /** Renames the paired machine in this app; an empty name clears it. */
+    setMachineAlias(alias: string): Promise<RelayStatus>
     listRooms(): Promise<RelayRoomInfo[]>
     selectRoom(roomId: string): Promise<RelayStatus>
     /** The paired Pi's sessions, shaped as ordinary session rows. */
@@ -673,6 +675,7 @@ const api: PiDesktopAPI = {
     setUrl: (url: string | null) => ipcRenderer.invoke(IPC_CHANNELS.RELAY_SET_URL, url),
     pair: (pairingUri: string) => ipcRenderer.invoke(IPC_CHANNELS.RELAY_PAIR, pairingUri),
     unpair: () => ipcRenderer.invoke(IPC_CHANNELS.RELAY_UNPAIR),
+    setMachineAlias: (alias: string) => ipcRenderer.invoke(IPC_CHANNELS.RELAY_SET_MACHINE_ALIAS, alias),
     listRooms: () => ipcRenderer.invoke(IPC_CHANNELS.RELAY_LIST_ROOMS),
     selectRoom: (roomId: string) => ipcRenderer.invoke(IPC_CHANNELS.RELAY_SELECT_ROOM, roomId),
     sessions: () => ipcRenderer.invoke(IPC_CHANNELS.RELAY_SESSIONS),

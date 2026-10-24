@@ -160,6 +160,7 @@ export const IPC_CHANNELS = {
   RELAY_SET_URL: 'relay:set-url',
   RELAY_PAIR: 'relay:pair',
   RELAY_UNPAIR: 'relay:unpair',
+  RELAY_SET_MACHINE_ALIAS: 'relay:set-machine-alias',
   RELAY_LIST_ROOMS: 'relay:list-rooms',
   RELAY_SELECT_ROOM: 'relay:select-room',
   RELAY_SYNC_SESSION: 'relay:sync-session',
@@ -1568,6 +1569,16 @@ export interface PairedRelayAgent {
    * and for a pairing made before this field was stored.
    */
   machineName?: string
+  /**
+   * A name the user typed for this machine, which wins over everything the Pi
+   * reports.
+   *
+   * It exists because the Pi's own hostname is not always available: it arrives
+   * only in `pair_ok`, so a pairing made before that field existed can never
+   * learn it, and the fallback then reads as a key fragment. Typing a name is
+   * the only way to have a readable label without pairing again.
+   */
+  machineAlias?: string
   /**
    * The room this Pi is running in, as reported by `pair_ok`.
    *

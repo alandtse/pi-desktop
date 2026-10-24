@@ -78,5 +78,10 @@ function normalizePairedAgent(value: unknown): PairedRelayAgent | null {
     // this would leave every frame unroutable until the next pairing.
     roomId: typeof candidate.roomId === 'string' && candidate.roomId.length > 0 ? candidate.roomId : null,
     pairedAt: candidate.pairedAt,
+    // A trimmed alias or nothing: an empty string would otherwise win over the
+    // reported hostname and show a blank machine name.
+    ...(typeof candidate.machineAlias === 'string' && candidate.machineAlias.trim() !== ''
+      ? { machineAlias: candidate.machineAlias.trim() }
+      : {}),
   }
 }
