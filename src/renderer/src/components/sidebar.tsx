@@ -34,6 +34,7 @@ import { useContextMenu, buildSessionContextMenu } from './context-menu'
 import { getSessionEngineLabel, getSessionRowLabels, hasMixedSessionEngines } from './sidebar-session-labels'
 import { ResizeHandle } from './resize-handle'
 import { formatRelativeTime } from '../utils/format-relative-time'
+import { machineDisplayName } from '../utils/session-tabs'
 import { SessionRuntimeIndicator } from './session-runtime-indicator'
 import { resolveRunSessionId } from '../utils/workflow-runs'
 import { useGlobalWorkflowOpen } from '../hooks'
@@ -416,7 +417,13 @@ export function Sidebar(): React.JSX.Element {
                 <Laptop
                   size={11}
                   className="shrink-0 text-faint"
-                  aria-label={t('sidebar.sessionRow.remoteBadge', { host: remoteRef.hostname || 'remote' })}
+                  aria-label={t('sidebar.sessionRow.remoteBadge', {
+                    host: machineDisplayName({
+                      machineName: remoteRef.hostname,
+                      agentName: remote?.settings.pairedAgent?.agentName,
+                      peer: remoteRef.peer,
+                    }),
+                  })}
                 />
               )}
             </div>
@@ -428,7 +435,11 @@ export function Sidebar(): React.JSX.Element {
             <div className="truncate text-[11px] text-faint">
               {engineLabel && `${engineLabel} · `}
               {remoteRef
-                ? remoteRef.hostname || t('sidebar.sessionRow.remoteFallback')
+                ? machineDisplayName({
+                    machineName: remoteRef.hostname,
+                    agentName: remote?.settings.pairedAgent?.agentName,
+                    peer: remoteRef.peer,
+                  })
                 : formatRelativeTime(session.lastModified, Date.now())}
             </div>
           </div>
@@ -722,7 +733,13 @@ export function Sidebar(): React.JSX.Element {
             />
             <Laptop size={12} className="shrink-0" />
             <span className="min-w-0 flex-1 truncate text-left">
-              {t('sidebar.remote.heading', { name: remote?.settings.pairedAgent?.agentName || 'remote' })}
+              {t('sidebar.remote.heading', {
+                name: machineDisplayName({
+                  machineName: remote?.settings.pairedAgent?.machineName,
+                  agentName: remote?.settings.pairedAgent?.agentName,
+                  peer: remote?.settings.pairedAgent?.pubkey,
+                }),
+              })}
             </span>
             <span className="shrink-0 text-[10px] text-faint">{remoteEntries.length}</span>
           </button>

@@ -40,6 +40,9 @@ export interface RemoteProjectTab {
  */
 export const PEER_KEY_PREFIX_LENGTH = 8
 
+/** Windows path separator, as a named constant so no escaping is involved. */
+const SEPARATOR = String.fromCharCode(92)
+
 /** Groups the relay's session rows by the machine each one runs on. */
 export function remoteProjectTabs(sessionList: readonly SessionListItem[]): RemoteProjectTab[] {
   const groups = new Map<string, RemoteProjectTab>()
@@ -58,7 +61,7 @@ export function remoteProjectTabs(sessionList: readonly SessionListItem[]): Remo
         // The machine's own reported name, never a folder: this tab is the
         // computer, and a folder name here would read as a second project. The
         // key prefix is labelled so a bare token does not read as a name.
-        title: hostname || `Paired Pi ${peer.slice(0, PEER_KEY_PREFIX_LENGTH)}`,
+        title: machineDisplayName({ machineName: hostname, peer }),
         paths: folder === '' ? [] : [folder],
         rows: [row],
       })
@@ -163,4 +166,32 @@ export function isTabActive(
     activeRemote.peer === tab.ref?.peer &&
     activeRemote.roomId === tab.ref?.roomId
   )
+}
+
+/**
+ * How a machine is named everywhere it appears.
+ *
+ * The tab and the sidebar heading both name the remote machine, and they drifted:
+ * the tab used the machine's reported hostname while the heading used the Pi's
+ * agent name, which is the session's name and repeats across a machine's sessions.
+ * One function for both is the only way they cannot disagree again.
+ *
+ * Order matters: the machine's own reported name, then the agent name (a real
+ * name, if not a machine one), then the key prefix labelled as a key so a bare
+ * token never reads as a name.
+ */
+export function machineDisplayName(source: {
+  machineName?: string
+  agentName?: string
+  peer?: string
+}): string {
+  const machine = source.machineName?.trim()
+  if (machine) return machine
+  const agent = source.agentName?.trim()
+  // A plain name (no path separator) is a real agent name; a path-shaped one is a
+  // folder default, which is not a machine name.
+  if (agent && !agent.includes('/') && !agent.includes(SEPARATOR)) return agent
+  const peer = source.peer?.trim()
+  if (peer) return `Paired Pi ${peer.slice(0, PEER_KEY_PREFIX_LENGTH)}`
+  return 'remote'
 }

@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { Check, Link2, Loader2, RefreshCw, Unlink, X } from 'lucide-react'
 import type { DetectedRelay, RelayStatus } from '../../../shared/ipc-contracts'
 import { formatIpcError } from '../utils/ipc-error'
+import { machineDisplayName } from '../utils/session-tabs'
 import { relayConnectionLabel } from '../utils/relay-connection-label'
 
 const BUTTON_CLASS =
@@ -161,7 +162,13 @@ export function RelaySettings(): React.JSX.Element {
         {paired ? (
           <div className="flex items-center justify-between gap-2 rounded-md border border-border bg-surface px-2 py-1">
             <div className="flex flex-col">
-              <span className="text-xs text-primary">{paired.agentName}</span>
+              <span className="text-xs text-primary">
+                {machineDisplayName({
+                  machineName: paired.machineName,
+                  agentName: paired.agentName,
+                  peer: paired.pubkey,
+                })}
+              </span>
               <span className="font-mono text-[10px] text-dim">{paired.pubkey.slice(0, 16)}…</span>
             </div>
             <button type="button" className={BUTTON_CLASS} onClick={() => void unpair()} disabled={busy !== null}>
