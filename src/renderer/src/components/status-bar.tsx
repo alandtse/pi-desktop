@@ -52,6 +52,28 @@ export function StatusBar(): React.JSX.Element {
     activeWorkspace?.id ?? null
   )
 
+  // Colour says what the number means at a glance, using the app's own semantic
+  // tokens rather than a second palette: a healthy cache share reads success, a
+  // session that is mostly re-sending its context reads warning, and a very long
+  // transcript reads dim so it does not compete with the live state.
+  const cachePercent = sessionStats?.tokens && sessionStats.tokens.total > 0
+    ? Math.round((sessionStats.tokens.cacheRead / sessionStats.tokens.total) * 100)
+    : null
+  const cacheClass = cachePercent === null || cachePercent === 0
+    ? 'text-faint'
+    : cachePercent >= 50
+      ? 'text-success'
+      : cachePercent >= 20
+        ? 'text-dim'
+        : 'text-warning'
+  const messageCountClass = !sessionStats
+    ? 'text-dim'
+    : sessionStats.totalMessages >= 400
+      ? 'text-warning'
+      : sessionStats.totalMessages >= 100
+        ? 'text-dim'
+        : 'text-faint'
+
   return (
     <div className="flex h-7 items-center justify-between border-t border-border bg-app px-3 text-xs">
       {/* Left section */}
@@ -191,13 +213,11 @@ export function StatusBar(): React.JSX.Element {
               total: sessionStats.tokens.total.toLocaleString(i18n.language),
             })}
           >
-            <Coins size={10} />
-            <span>{formatCompact(sessionStats.tokens.total)}</span>
-            {sessionStats.tokens.cacheRead > 0 && (
-              <span className="text-faint">
-                {t('statusBar.cacheShare', {
-                  percent: Math.round((sessionStats.tokens.cacheRead / sessionStats.tokens.total) * 100),
-                })}
+            <Coins size={10} className={cacheClass} />
+            <span className="text-secondary">{formatCompact(sessionStats.tokens.total)}</span>
+            {cachePercent !== null && (
+              <span className={cacheClass}>
+                {t('statusBar.cacheShare', { percent: cachePercent })}
               </span>
             )}
           </div>
@@ -214,8 +234,8 @@ export function StatusBar(): React.JSX.Element {
               total: sessionStats.totalMessages,
             })}
           >
-            <MessagesSquare size={10} />
-            <span>{sessionStats.totalMessages.toLocaleString(i18n.language)}</span>
+            <MessagesSquare size={10} className={messageCountClass} />
+            <span className={messageCountClass}>{sessionStats.totalMessages.toLocaleString(i18n.language)}</span>
           </div>
         )}
 
