@@ -619,6 +619,12 @@ export function useInitialize(): void {
       void useAppStore.getState().loadNotes()
       void useAppStore.getState().loadCustomModels()
       void useAppStore.getState().checkForUpdates()
+      // Commands and skills are only loaded when a 'running' status event arrives,
+      // so a Pi that was already up before this listener existed leaves both lists
+      // empty — the composer then offers no slash commands and the Skills panel
+      // reads as empty even though the engine reports 128 commands and 31 skills.
+      void useAppStore.getState().loadCommands()
+      void useAppStore.getState().loadSkills()
 
       // "Resume Last Session" opens the project's last conversation in the
       // background, Home included, so the chat shows what the next start

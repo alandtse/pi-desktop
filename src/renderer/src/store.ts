@@ -811,6 +811,28 @@ function generateId(): string {
   return `msg-${Date.now()}-${++messageCounter}`
 }
 
+/**
+ * Waits briefly for the engine to answer with a command catalog.
+ *
+ * True once it does. False after the last attempt, so a genuinely command-less
+ * engine costs a short delay once rather than a permanent retry.
+ */
+const COMMAND_CATALOG_RETRY_MS = 700
+const COMMAND_CATALOG_ATTEMPTS = 6
+async function retryCommandCatalog(): Promise<boolean> {
+  for (let attempt = 0; attempt < COMMAND_CATALOG_ATTEMPTS; attempt++) {
+    await new Promise((resolve) => setTimeout(resolve, COMMAND_CATALOG_RETRY_MS))
+    try {
+      const listing = await window.piDesktop.piCommands.list()
+      if (Array.isArray(listing) && listing.length > 0) return true
+    } catch {
+      // Keep waiting: a refused call means the engine is not up yet, which is the
+      // condition this retry exists for.
+    }
+  }
+  return false
+}
+
 function normalizePiCommands(raw: unknown): PiCommand[] {
   if (!Array.isArray(raw)) return []
   return raw
@@ -3120,7 +3142,15 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
 
   loadCommands: async () => {
     try {
-      set({ commands: normalizePiCommands(await window.piDesktop.piCommands.list()) })
+      const loaded = normalizePiCommands(await window.piDesktop.piCommands.list())
+      // The engine answers with nothing until it is running, and a boot-time load
+      // races the spawn. An empty answer is retried rather than cached, or the
+      // composer would offer no slash commands for the rest of the session.
+      if (loaded.length === 0 && get().commands.length === 0 && (await retryCommandCatalog())) {
+        set({ commands: normalizePiCommands(await window.piDesktop.piCommands.list()) })
+        return
+      }
+      set({ commands: loaded })
     } catch {
       set({ commands: [] })
     }
