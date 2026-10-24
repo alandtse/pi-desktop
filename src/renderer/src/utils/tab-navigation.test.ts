@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { adjacentTabIndex, moveProjectTab, projectTabs } from './tab-navigation'
-import { remoteProjectTabs, sessionTabs } from './session-tabs'
+import { machineDisplayName, remoteProjectTabs, sessionTabs } from './session-tabs'
+import { commandDisplayName, filterCommands } from '../../../shared/pi-command'
+import type { PiCommand } from '../../../shared/pi-command'
 import type { SessionListItem, SessionRuntimeInfo, Workspace } from '../../../shared/ipc-contracts'
 
 const workspace = (id: string, createdAt: number): Workspace => ({ id, createdAt, name: id, path: `/${id}`, lastActiveAt: 0, color: '' })
@@ -168,4 +170,43 @@ test('a local chat does not stand beside the chats of a remote machine', () => {
     newSessionFallback: 'New',
   })
   assert.deepEqual(remoteOnly.map((tab) => tab.id), ['remote:peer:room-a'])
+})
+
+test('a machine is named the same way wherever it is shown', () => {
+  // The tab and the sidebar heading drifted: the tab used the machine's hostname
+  // while the heading used the Pi's agent name, which names a session and repeats
+  // across a machine's sessions. Both now call this, so they cannot disagree.
+  const reported = { machineName: 'MacBookPro.lan', agentName: 'open-shaders', peer: 'hKqfHH3rUAvSuwGI9yam2BkM5DCiiGlIgs53wFR+SiQ=' }
+  assert.equal(machineDisplayName(reported), 'MacBookPro.lan', 'the hostname wins when the Pi reported one')
+
+  // An older pairing has no hostname; the agent name is then the best real name.
+  assert.equal(machineDisplayName({ agentName: 'open-shaders', peer: reported.peer }), 'open-shaders')
+
+  // A folder-shaped agent name is not a machine name — this is the open-shaders
+  // label the user reported as wrong for the whole machine.
+  assert.equal(machineDisplayName({ agentName: '/Users/alandtse/open-shaders', peer: reported.peer }), 'Paired Pi hKqfHH3r')
+
+  // Nothing but a key: say so rather than showing a bare token as if it were a name.
+  assert.equal(machineDisplayName({ peer: reported.peer }), 'Paired Pi hKqfHH3r')
+  assert.equal(machineDisplayName({}), 'remote')
+})
+
+test('a slash token finds the engine commands including skills and extensions', () => {
+  // Measured against the real engine, which reports 128 commands: 86 extensions,
+  // 31 skills, 11 prompts. The composer offered none of them because the catalog
+  // was only loaded on a live status event, so this pins the matching behaviour
+  // for the two kinds the user reported missing.
+  const catalog: PiCommand[] = [
+    { name: 'btw', description: 'Continue a side conversation', source: 'extension' },
+    { name: 'side', description: 'Alias for /btw', source: 'extension' },
+    { name: 'skill:caveman', description: 'Ultra-compressed mode', source: 'skill' },
+    { name: 'skill:find-skills', description: 'Discover skills', source: 'skill' },
+  ]
+  assert.equal(filterCommands(catalog, '/btw')[0].name, 'btw')
+  assert.equal(filterCommands(catalog, '/caveman')[0].name, 'skill:caveman', 'a skill is found by its bare name')
+  assert.equal(filterCommands(catalog, '/find-skills')[0].name, 'skill:find-skills')
+
+  // A skill shows without the redundant "skill:" prefix, which is what the
+  // command list renders.
+  assert.equal(commandDisplayName(catalog[2]), 'caveman')
 })

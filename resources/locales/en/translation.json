@@ -1742,7 +1742,10 @@
     "waitingOnPromptElsewhere": "{{agent}} is waiting on a prompt in another workspace; switch to it to answer",
     "workflowCount_one": "{{count}} workflow",
     "workflowCount_other": "{{count}} workflows",
-    "workflowsFallback": "workflows"
+    "workflowsFallback": "workflows",
+    "tokenUsage": "Tokens: {{total}} total — {{input}} in, {{output}} out, {{cacheRead}} cache read, {{cacheWrite}} cache write",
+    "messageCounts": "{{total}} messages: {{user}} from you, {{assistant}} from the agent, {{tools}} tool calls",
+    "cacheShare": "{{percent}}% cached"
   },
   "store": {
     "confirm": {

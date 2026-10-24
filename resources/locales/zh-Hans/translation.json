@@ -1706,7 +1706,10 @@
     "streaming": "流式输出中",
     "waitingOnPromptElsewhere": "{{agent}} 在另一个工作区有询问等待回应；切换过去作答",
     "workflowCount_other": "{{count}} 个工作流",
-    "workflowsFallback": "工作流"
+    "workflowsFallback": "工作流",
+    "tokenUsage": "词元：共 {{total}} — 输入 {{input}}，输出 {{output}}，缓存读取 {{cacheRead}}，缓存写入 {{cacheWrite}}",
+    "messageCounts": "{{total}} 条消息：你发出 {{user}} 条，代理 {{assistant}} 条，工具调用 {{tools}} 次",
+    "cacheShare": "{{percent}}% 来自缓存"
   },
   "store": {
     "confirm": {

@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next'
 import { useAppStore, countPromptsWaitingElsewhere, formatPromptsWaiting } from '../store'
 import { agentEngineLabel } from '../../../shared/agent-engine-label'
+import { formatCompact } from '../utils/format-compact'
 import { clsx } from 'clsx'
 import { ProjectBranchSelector } from './project-branch-selector'
 import {
@@ -12,6 +13,8 @@ import {
   Settings,
   Loader2,
   Workflow as WorkflowIcon,
+  Coins,
+  MessagesSquare,
 } from 'lucide-react'
 
 export function StatusBar(): React.JSX.Element {
@@ -172,6 +175,48 @@ export function StatusBar(): React.JSX.Element {
             )}
             <span>{isCompacting ? t('statusBar.compacting') : t('statusBar.compact')}</span>
           </button>
+        )}
+
+        {/* Tokens and cache. Pi reports these on every turn and the app kept them
+            to itself, so the numbers that say where a long session's cost comes
+            from were invisible. */}
+        {sessionStats?.tokens && sessionStats.tokens.total > 0 && (
+          <div
+            className="flex items-center gap-1 text-dim"
+            title={t('statusBar.tokenUsage', {
+              input: sessionStats.tokens.input.toLocaleString(i18n.language),
+              output: sessionStats.tokens.output.toLocaleString(i18n.language),
+              cacheRead: sessionStats.tokens.cacheRead.toLocaleString(i18n.language),
+              cacheWrite: sessionStats.tokens.cacheWrite.toLocaleString(i18n.language),
+              total: sessionStats.tokens.total.toLocaleString(i18n.language),
+            })}
+          >
+            <Coins size={10} />
+            <span>{formatCompact(sessionStats.tokens.total)}</span>
+            {sessionStats.tokens.cacheRead > 0 && (
+              <span className="text-faint">
+                {t('statusBar.cacheShare', {
+                  percent: Math.round((sessionStats.tokens.cacheRead / sessionStats.tokens.total) * 100),
+                })}
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* Message counts, so a long session's shape is visible at a glance. */}
+        {sessionStats && sessionStats.totalMessages > 0 && (
+          <div
+            className="flex items-center gap-1 text-dim"
+            title={t('statusBar.messageCounts', {
+              user: sessionStats.userMessages,
+              assistant: sessionStats.assistantMessages,
+              tools: sessionStats.toolCalls,
+              total: sessionStats.totalMessages,
+            })}
+          >
+            <MessagesSquare size={10} />
+            <span>{sessionStats.totalMessages.toLocaleString(i18n.language)}</span>
+          </div>
         )}
 
         {/* Cost */}
