@@ -2873,3 +2873,50 @@ test('a turn in a session drops its cached transcript', async () => {
   releaseRefresh()
   assert.equal(painted.length, 0, 'the stale cached transcript was not reused')
 })
+
+test('a cached chat is on screen while its switch is still in flight', async () => {
+  // The cache used to be consulted inside reloadActiveSession, which only runs
+  // after session.switch() answers — so returning to a cached chat still paid a
+  // full bind before painting anything, which is why local switches felt slower
+  // than remote ones. The paint must happen DURING the switch.
+  const workspace = {
+    id: 'ws-cache-during',
+    name: 'Cache',
+    path: '/tmp/workspace-cache-during',
+    createdAt: 0,
+    lastActiveAt: 0,
+    color: '#000',
+  }
+  const pathA = '/tmp/session-during-a.jsonl'
+  const pathB = '/tmp/session-during-b.jsonl'
+  activeWorkspaceResult = workspace
+  sessionStateResult = resumedSessionState(pathA)
+  getMessagesResult = [{ role: 'user', content: [{ type: 'text', text: 'cached text' }], timestamp: 1 }]
+  useAppStore.setState({
+    activeWorkspace: workspace,
+    workspaces: [workspace],
+    piStatus: 'running',
+    sessionState: resumedSessionState(pathA),
+    activeSessionRuntimeId: 'runtime-during-a',
+    messages: [],
+  })
+  await useAppStore.getState().reloadActiveSession({ refreshList: false })
+  assert.ok(useAppStore.getState().messages.length > 0, 'the first load populated the cache')
+
+  // Leave A for B, then come back. Record what is on screen at the moment the
+  // switch for A is actually executing.
+  sessionStateResult = resumedSessionState(pathB)
+  useAppStore.setState({ sessionState: resumedSessionState(pathB), activeSessionRuntimeId: 'runtime-during-b', messages: [] })
+  await useAppStore.getState().reloadActiveSession({ refreshList: false })
+
+  let paintedDuringSwitch = -1
+  switchHook = () => {
+    paintedDuringSwitch = useAppStore.getState().messages.length
+  }
+  sessionStateResult = resumedSessionState(pathA)
+  getMessagesGate = () => new Promise<void>(() => {}) // never answers
+  await useAppStore.getState().switchSession(pathA)
+  switchHook = null
+
+  assert.ok(paintedDuringSwitch > 0, 'the cached transcript is painted before the switch answers')
+})

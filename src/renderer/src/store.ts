@@ -2413,6 +2413,14 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
           extensionUiRequest: null,
         })
         get().clearMessages()
+        // Paint the transcript we already hold BEFORE binding the runtime. The
+        // cache used to be consulted inside reloadActiveSession, which only runs
+        // after this round-trip answers — so a cached chat still showed a spinner
+        // for the whole bind, and switching felt as slow as a cold load.
+        const cachedEntry = transcriptCache.get(transcriptKey(path))
+        if (cachedEntry && cachedEntry.messages.length > 0) {
+          set({ messages: cachedEntry.messages, promptHistory: promptHistoryFrom(cachedEntry.messages) })
+        }
         const result = await window.piDesktop.session.switch(path, projectPath) as SessionRuntimeInfo | { success?: boolean; error?: string } | null
         if (gen !== sessionLoadGeneration) return
         if (result && 'success' in result && result.success === false) {
