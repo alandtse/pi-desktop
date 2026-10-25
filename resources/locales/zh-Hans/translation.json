@@ -309,7 +309,11 @@
       "selectAll": "Ctrl+A"
     },
     "unarchive": "取消归档",
-    "workflowRuns": "工作流运行"
+    "workflowRuns": "工作流运行",
+    "renameMachine": "重命名机器…",
+    "useReportedName": "使用上报的名称",
+    "unpairMachine": "取消配对此机器",
+    "renameMachineTitle": "重命名机器"
   },
   "conveyor": {
     "branches": {

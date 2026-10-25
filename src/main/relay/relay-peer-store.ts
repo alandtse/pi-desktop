@@ -18,7 +18,6 @@ export interface RelayPeerRecord {
     /** The computer's name as the Pi reported it; absent on older records. */
     machineName?: string
     /** A name the user typed for this machine; outranks anything reported. */
-    machineAlias?: string
     roomId: string | null
     pairedAt: string
   } | null

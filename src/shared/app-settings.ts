@@ -63,7 +63,27 @@ function normalizeRelaySettings(value: unknown): RelaySettings {
     enabled: url !== null && candidate.enabled === true,
     url,
     pairedAgent: normalizePairedAgent(candidate.pairedAgent),
+    machineNames: normalizeMachineNames(candidate.machineNames),
   }
+}
+
+/**
+ * Names the user gave machines, keyed by peer key.
+ *
+ * Anything malformed is dropped rather than repaired: a name is cosmetic, and a
+ * half-trusted key would attach the wrong name to the wrong computer.
+ */
+function normalizeMachineNames(value: unknown): Record<string, string> {
+  if (!value || typeof value !== 'object') return {}
+  const names: Record<string, string> = {}
+  for (const [key, name] of Object.entries(value as Record<string, unknown>)) {
+    if (typeof name !== 'string') continue
+    const trimmed = name.trim()
+    // An empty name would shadow the reported hostname and show a blank label.
+    if (key === '' || trimmed === '') continue
+    names[key] = trimmed
+  }
+  return names
 }
 
 function normalizePairedAgent(value: unknown): PairedRelayAgent | null {
@@ -78,10 +98,5 @@ function normalizePairedAgent(value: unknown): PairedRelayAgent | null {
     // this would leave every frame unroutable until the next pairing.
     roomId: typeof candidate.roomId === 'string' && candidate.roomId.length > 0 ? candidate.roomId : null,
     pairedAt: candidate.pairedAt,
-    // A trimmed alias or nothing: an empty string would otherwise win over the
-    // reported hostname and show a blank machine name.
-    ...(typeof candidate.machineAlias === 'string' && candidate.machineAlias.trim() !== ''
-      ? { machineAlias: candidate.machineAlias.trim() }
-      : {}),
   }
 }

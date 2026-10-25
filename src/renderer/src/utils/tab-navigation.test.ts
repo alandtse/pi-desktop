@@ -75,11 +75,19 @@ test('session order includes only open tabs in this project, newest first', () =
   )
 })
 
-const remoteRow = (roomId: string, cwd: string, projectName: string, name: string): SessionListItem => ({
-  path: `remote://peer/${roomId}`, name, preview: null, sessionId: roomId,
-  lastModified: 0, messageCount: 1, projectPath: cwd, projectName,
-  remote: { peer: 'peer', roomId, hostname: 'mac' },
-})
+function remoteRow(
+  roomId: string,
+  cwd: string,
+  projectName: string,
+  name: string,
+  peer = 'peer',
+): SessionListItem {
+  return {
+    path: `remote://${peer}/${roomId}`, name, preview: null, sessionId: roomId,
+    lastModified: 0, messageCount: 1, projectPath: cwd, projectName,
+    remote: { peer, roomId, hostname: 'mac' },
+  }
+}
 
 test('a remote session is not a chat inside a local project', () => {
   // A chat in the strip belongs to the project on screen; a session on the other
@@ -191,6 +199,20 @@ test('a machine is named the same way wherever it is shown', () => {
     'a typed alias wins over the reported hostname',
   )
   assert.equal(machineDisplayName({ machineAlias: 'Mac', peer }), 'Mac', 'an alias stands alone')
+  // The Pi's agent name is NOT a machine name: it names a session, and using it
+  // is what made one machine show up as "open-shaders" in the sidebar.
+  assert.equal(
+    machineDisplayName({ agentName: 'open-shaders', peer } as never),
+    'Paired Pi hKqfHH3r',
+    'a session-shaped agent name is never used as the machine name',
+  )
+  // A name belongs to the MACHINE, so two machines can carry their own.
+  const rows = [
+    remoteRow('room-a', '/Users/a', 'a', 'a', 'peerA'),
+    remoteRow('room-b', '/Users/b', 'b', 'b', 'peerB'),
+  ]
+  const projects = remoteProjectTabs(rows, { peerA: 'Studio Mac', peerB: 'Laptop' })
+  assert.deepEqual(projects.map((p) => p.title).sort(), ['Laptop', 'Studio Mac'])
 
   // The Pi's agent name must never be used: it names a session, so one machine
   // showed up as "open-shaders" — the label the user reported as wrong.

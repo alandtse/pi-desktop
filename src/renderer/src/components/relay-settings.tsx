@@ -39,8 +39,9 @@ export function RelaySettings(): React.JSX.Element {
 
   // Show the stored name in the box, so saving an edit does not start from blank.
   useEffect(() => {
-    setAliasDraft(status?.settings.pairedAgent?.machineAlias ?? '')
-  }, [status?.settings.pairedAgent?.machineAlias])
+    const peer = status?.settings.pairedAgent?.pubkey
+    setAliasDraft(peer ? status.settings.machineNames[peer] ?? '' : '')
+  }, [status?.settings.machineNames, status?.settings.pairedAgent?.pubkey])
 
   // Offer what the Pi on this machine already uses. Detection never writes, so
   // opening Settings cannot repoint a relay the user did not choose here.
@@ -84,7 +85,9 @@ export function RelaySettings(): React.JSX.Element {
   const renameMachine = useCallback(
     () =>
       run('alias', async () => {
-        const next = await window.piDesktop.relay.setMachineAlias(aliasDraft)
+        const peer = status?.settings.pairedAgent?.pubkey
+        if (!peer) return null
+        const next = await window.piDesktop.relay.setMachineName(peer, aliasDraft)
         setNotice(t('settings.relay.pair.renamed'))
         return next
       }),
@@ -182,7 +185,7 @@ export function RelaySettings(): React.JSX.Element {
                 <span className="text-xs text-primary">
                   {machineDisplayName({
                     machineName: paired.machineName,
-                    machineAlias: paired.machineAlias,
+                    machineAlias: status?.settings.machineNames[paired.pubkey],
                     peer: paired.pubkey,
                   })}
                 </span>

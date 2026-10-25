@@ -156,16 +156,15 @@ export class RelaySessionBridge {
    * what the status payload carries. An empty name clears the alias so the
    * reported hostname (or the key) shows again.
    */
-  async setMachineAlias(alias: string): Promise<RelayStatus> {
-    const trimmed = alias.trim()
+  async setMachineName(peer: string, name: string): Promise<RelayStatus> {
     const settings = await this.deps.settings.read()
-    const agent = settings.relay.pairedAgent
-    if (!agent) return this.getStatus()
-    const next: PairedRelayAgent = trimmed === ''
-      ? omitAlias(agent)
-      : { ...agent, machineAlias: trimmed }
-    await this.deps.peers.save(next)
-    await this.deps.settings.write({ relay: { ...settings.relay, pairedAgent: next } })
+    const next = { ...settings.relay.machineNames }
+    const trimmed = name.trim()
+    // An empty name removes the override rather than storing one: an empty
+    // string would shadow the reported hostname and show a blank label.
+    if (trimmed === '') delete next[peer]
+    else next[peer] = trimmed
+    await this.deps.settings.write({ relay: { ...settings.relay, machineNames: next } })
     await this.rebuild()
     return this.getStatus()
   }
@@ -419,8 +418,3 @@ function remoteSessionPath(peer: string, roomId: string): string {
   return `remote://${peer}/${roomId}`
 }
 
-/** Drops an empty alias so a cleared name does not shadow the reported hostname. */
-function omitAlias(agent: PairedRelayAgent): PairedRelayAgent {
-  const { machineAlias: _cleared, ...rest } = agent
-  return rest
-}

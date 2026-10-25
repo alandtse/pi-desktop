@@ -160,7 +160,7 @@ export const IPC_CHANNELS = {
   RELAY_SET_URL: 'relay:set-url',
   RELAY_PAIR: 'relay:pair',
   RELAY_UNPAIR: 'relay:unpair',
-  RELAY_SET_MACHINE_ALIAS: 'relay:set-machine-alias',
+  RELAY_SET_MACHINE_NAME: 'relay:set-machine-name',
   RELAY_LIST_ROOMS: 'relay:list-rooms',
   RELAY_SELECT_ROOM: 'relay:select-room',
   RELAY_SYNC_SESSION: 'relay:sync-session',
@@ -1498,6 +1498,15 @@ export interface RelaySettings {
   url: string | null
   /** The Pi this desktop is paired with, as shown in the Relay panel. */
   pairedAgent: PairedRelayAgent | null
+  /**
+   * Names the user gave machines, keyed by the machine's peer key.
+   *
+   * Keyed rather than stored on the pairing because a name belongs to a MACHINE,
+   * not to the one pairing this desktop happens to hold: renaming it should not
+   * be lost when the pairing is replaced, and a second machine must be able to
+   * carry its own name.
+   */
+  machineNames: Record<string, string>
 }
 
 export type RelayConnectionStatus = 'idle' | 'connecting' | 'connected' | 'paired' | 'error'
@@ -1569,16 +1578,6 @@ export interface PairedRelayAgent {
    * and for a pairing made before this field was stored.
    */
   machineName?: string
-  /**
-   * A name the user typed for this machine, which wins over everything the Pi
-   * reports.
-   *
-   * It exists because the Pi's own hostname is not always available: it arrives
-   * only in `pair_ok`, so a pairing made before that field existed can never
-   * learn it, and the fallback then reads as a key fragment. Typing a name is
-   * the only way to have a readable label without pairing again.
-   */
-  machineAlias?: string
   /**
    * The room this Pi is running in, as reported by `pair_ok`.
    *

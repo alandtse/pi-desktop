@@ -69,9 +69,13 @@ function registerRelayPairingHandlers(bridge: RelaySessionBridge): void {
     }
   })
 
-  ipcMain.handle(IPC_CHANNELS.RELAY_SET_MACHINE_ALIAS, async (event, alias: unknown) => {
+  ipcMain.handle(IPC_CHANNELS.RELAY_SET_MACHINE_NAME, async (event, target: unknown, value: unknown) => {
     assertTrustedSender(event)
-    return bridge.setMachineAlias(typeof alias === 'string' ? alias : '')
+    const peer = typeof target === 'string' ? target : ''
+    const name = typeof value === 'string' ? value : ''
+    // A name belongs to a machine, and the machine is identified by its peer key.
+    if (peer === '') throw new Error('A machine name needs the machine it belongs to')
+    return bridge.setMachineName(peer, name)
   })
 
   ipcMain.handle(IPC_CHANNELS.RELAY_UNPAIR, async (event) => {

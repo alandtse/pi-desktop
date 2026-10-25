@@ -67,7 +67,6 @@ function toAgent(
     pubkey: string
     agentName: string
     machineName?: string
-    machineAlias?: string
     roomId: string | null
     pairedAt: string
   } | null,
@@ -77,7 +76,6 @@ function toAgent(
     pubkey: target.pubkey,
     agentName: target.agentName,
     machineName: target.machineName,
-    machineAlias: target.machineAlias,
     roomId: target.roomId,
     pairedAt: target.pairedAt,
   }
@@ -88,7 +86,6 @@ function toTarget(agent: PairedRelayAgent) {
     pubkey: agent.pubkey,
     agentName: agent.agentName,
     machineName: agent.machineName,
-    machineAlias: agent.machineAlias,
     roomId: agent.roomId,
     pairedAt: agent.pairedAt,
   }

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { AlertCircle, Boxes, CheckCircle2, FolderOpen, GitBranch, Laptop, Loader2, MessageSquarePlus, PanelLeft, Plus, Settings, X, XCircle } from 'lucide-react'
 import { clsx } from 'clsx'
@@ -9,7 +9,7 @@ import { isTabActive, remoteProjectTabs, sessionTabs as getSessionTabs } from '.
 import { activeShortcuts } from '../utils/app-shortcuts'
 import { formatShortcut } from '../../../shared/keyboard-shortcuts'
 import { SessionRuntimeIndicator } from './session-runtime-indicator'
-import type { Workspace } from '../../../shared/ipc-contracts'
+import type { RelayStatus, Workspace } from '../../../shared/ipc-contracts'
 
 const PROJECT_TAB_DRAG_TYPE = 'application/x-pi-desktop-project-tab'
 
@@ -67,9 +67,24 @@ export function WorkspaceTabs(): React.JSX.Element {
     () => getProjectTabs(workspaces, projectTabOrder),
     [workspaces, projectTabOrder]
   )
+  // Names live on the relay status, so this strip follows it rather than
+  // subscribing to a second copy that could drift.
+  const [relayStatus, setRelayStatus] = useState<RelayStatus | null>(null)
+  useEffect(() => {
+    let live = true
+    void window.piDesktop.relay.status().then((status) => { if (live) setRelayStatus(status) }).catch(() => undefined)
+    const stop = window.piDesktop.relay.onStatus(setRelayStatus)
+    return () => {
+      live = false
+      stop()
+    }
+  }, [])
   // A session on another machine belongs to a folder THERE, so it is a project
   // tab of its own rather than a chat inside whichever local project is active.
-  const remoteProjects = useMemo(() => remoteProjectTabs(sessionList), [sessionList])
+  const remoteProjects = useMemo(
+    () => remoteProjectTabs(sessionList, relayStatus?.settings.machineNames ?? {}),
+    [sessionList, relayStatus?.settings.machineNames],
+  )
   const activeRemoteProjectId = useMemo(() => {
     if (!activeRemoteRef) return null
     return remoteProjects.find((project) => project.rows.some((row) =>

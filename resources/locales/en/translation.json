@@ -318,7 +318,11 @@
       "selectAll": "Ctrl+A"
     },
     "unarchive": "Unarchive",
-    "workflowRuns": "Workflow Runs"
+    "workflowRuns": "Workflow Runs",
+    "renameMachine": "Rename machine…",
+    "useReportedName": "Use the reported name",
+    "unpairMachine": "Unpair this machine",
+    "renameMachineTitle": "Rename machine"
   },
   "conveyor": {
     "branches": {

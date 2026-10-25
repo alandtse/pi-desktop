@@ -67,5 +67,6 @@ export const DEFAULT_SETTINGS: AppSettings = {
     enabled: false,
     url: null,
     pairedAgent: null,
+    machineNames: {},
   },
 }

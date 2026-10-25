@@ -30,7 +30,7 @@ import {
 } from 'lucide-react'
 import { useMemo, useState, useRef, useEffect } from 'react'
 import { StatusPopover } from './status-popover'
-import { useContextMenu, buildSessionContextMenu } from './context-menu'
+import { useContextMenu, buildMachineContextMenu, buildSessionContextMenu } from './context-menu'
 import { getSessionEngineLabel, getSessionRowLabels, hasMixedSessionEngines } from './sidebar-session-labels'
 import { ResizeHandle } from './resize-handle'
 import { formatRelativeTime } from '../utils/format-relative-time'
@@ -171,8 +171,10 @@ export function Sidebar(): React.JSX.Element {
   }
 
   // Pi's rename targets the active session, exposed through its Recent row.
-  const [renamingWhere, setRenamingWhere] = useState<'recent' | null>(null)
+  const [renamingWhere, setRenamingWhere] = useState<'recent' | 'machine' | null>(null)
   const [renameValue, setRenameValue] = useState('')
+  // The machine being renamed, held beside the name so the commit knows its peer.
+  const [renamingPeer, setRenamingPeer] = useState<string | null>(null)
   const renameCancelRef = useRef(false)
 
   const startSessionRename = (where: 'recent'): void => {
@@ -193,6 +195,29 @@ export function Sidebar(): React.JSX.Element {
     if (!cancelled && trimmed) setSessionName(trimmed)
   }
 
+  // A machine name lives on the machine, so the commit writes it against that
+  // peer key rather than against whatever pairing happens to be current.
+  const finishMachineRename = (peer: string): void => {
+    const cancelled = renameCancelRef.current
+    renameCancelRef.current = false
+    setRenamingWhere(null)
+    if (!cancelled) {
+      void window.piDesktop.relay
+        .setMachineName(peer, renameValue.trim())
+        .then((next) => {
+          if (next) setRemote(next)
+        })
+        .catch(() => undefined)
+    }
+  }
+
+  const startMachineRename = (peer: string, currentName: string): void => {
+    renameCancelRef.current = false
+    setRenameValue(currentName)
+    setRenamingWhere('machine')
+    setRenamingPeer(peer)
+  }
+
   const renderRenameInput = (): React.JSX.Element => (
     <input
       type="text"
@@ -211,7 +236,10 @@ export function Sidebar(): React.JSX.Element {
           e.currentTarget.blur()
         }
       }}
-      onBlur={finishSessionRename}
+      onBlur={() => {
+        if (renamingWhere === 'machine' && renamingPeer) finishMachineRename(renamingPeer)
+        else finishSessionRename()
+      }}
       placeholder={t('sidebar.sessionNamePlaceholder')}
       autoFocus
       className="min-w-0 flex-1 rounded border border-border-strong bg-card px-2 py-0.5 text-sm text-primary placeholder:text-faint focus:border-focus focus:outline-none"
@@ -330,6 +358,31 @@ export function Sidebar(): React.JSX.Element {
   // session panel and the quick switcher.
   const openSession = useAppStore((state) => state.openSessionItem)
 
+  // Right-clicking a machine renames it where it is shown, the same way a
+  // session or a project is renamed: the name belongs to that machine.
+  const handleMachineContextMenu = (e: React.MouseEvent, peer: string, shownName: string): void => {
+    e.preventDefault()
+    e.nativeEvent.stopPropagation()
+    const customName = remote?.settings.machineNames[peer]
+    showMenu(
+      e,
+      buildMachineContextMenu(
+        peer,
+        shownName,
+        { hasCustomName: Boolean(customName) },
+        {
+          onRename: (key, current) => startMachineRename(key, current),
+          onForgetName: (key) => {
+            void window.piDesktop.relay
+              .setMachineName(key, '')
+              .then((next) => { if (next) setRemote(next) })
+              .catch(() => undefined)
+          },
+        },
+      ),
+    )
+  }
+
   const handleSessionRightClick = (e: React.MouseEvent, session: SessionListItem): void => {
     // Prevent the app-level document-level contextmenu handler from also
     // firing (which would build & show a *default* menu on top of ours).
@@ -420,7 +473,7 @@ export function Sidebar(): React.JSX.Element {
                   aria-label={t('sidebar.sessionRow.remoteBadge', {
                     host: machineDisplayName({
                       machineName: remoteRef.hostname,
-                      machineAlias: remote?.settings.pairedAgent?.machineAlias,
+                      machineAlias: remote?.settings.machineNames[remoteRef.peer],
                       peer: remoteRef.peer,
                     }),
                   })}
@@ -437,7 +490,7 @@ export function Sidebar(): React.JSX.Element {
               {remoteRef
                 ? machineDisplayName({
                     machineName: remoteRef.hostname,
-                    machineAlias: remote?.settings.pairedAgent?.machineAlias,
+                    machineAlias: remote?.settings.machineNames[remoteRef.peer],
                     peer: remoteRef.peer,
                   })
                 : formatRelativeTime(session.lastModified, Date.now())}
@@ -726,6 +779,28 @@ export function Sidebar(): React.JSX.Element {
             onClick={() => setRemoteOpen((open) => !open)}
             className="flex w-full items-center gap-1.5 rounded px-2 py-1.5 text-xs font-medium uppercase tracking-wider text-dim hover:text-secondary transition-colors"
             title={t('sidebar.remote.headingTitle')}
+            onContextMenu={(e) => {
+              const peer = remote?.settings.pairedAgent?.pubkey
+              if (!peer) return
+              const shown = machineDisplayName({
+                machineName: remote?.settings.pairedAgent?.machineName,
+                machineAlias: remote?.settings.machineNames[peer],
+                peer,
+              })
+              handleMachineContextMenu(e, peer, shown)
+            }}
+            onDoubleClick={() => {
+              const peer = remote?.settings.pairedAgent?.pubkey
+              if (!peer) return
+              startMachineRename(
+                peer,
+                machineDisplayName({
+                  machineName: remote?.settings.pairedAgent?.machineName,
+                  machineAlias: remote?.settings.machineNames[peer],
+                  peer,
+                }),
+              )
+            }}
           >
             <ChevronDown
               size={12}
@@ -733,13 +808,17 @@ export function Sidebar(): React.JSX.Element {
             />
             <Laptop size={12} className="shrink-0" />
             <span className="min-w-0 flex-1 truncate text-left">
-              {t('sidebar.remote.heading', {
-                name: machineDisplayName({
-                  machineName: remote?.settings.pairedAgent?.machineName,
-                  machineAlias: remote?.settings.pairedAgent?.machineAlias,
-                  peer: remote?.settings.pairedAgent?.pubkey,
-                }),
-              })}
+              {renamingWhere === 'machine' && renamingPeer === remote?.settings.pairedAgent?.pubkey
+                ? renderRenameInput()
+                : t('sidebar.remote.heading', {
+                    name: machineDisplayName({
+                      machineName: remote?.settings.pairedAgent?.machineName,
+                      machineAlias: remote?.settings.pairedAgent
+                        ? remote.settings.machineNames[remote.settings.pairedAgent.pubkey]
+                        : undefined,
+                      peer: remote?.settings.pairedAgent?.pubkey,
+                    }),
+                  })}
             </span>
             <span className="shrink-0 text-[10px] text-faint">{remoteEntries.length}</span>
           </button>

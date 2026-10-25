@@ -41,7 +41,12 @@ export interface RemoteProjectTab {
 export const PEER_KEY_PREFIX_LENGTH = 8
 
 /** Groups the relay's session rows by the machine each one runs on. */
-export function remoteProjectTabs(sessionList: readonly SessionListItem[]): RemoteProjectTab[] {
+export function remoteProjectTabs(
+  sessionList: readonly SessionListItem[],
+  // Names the user gave machines, keyed by peer key. Passed in rather than read
+  // from the store so this stays a pure function.
+  machineNames: Readonly<Record<string, string>> = {},
+): RemoteProjectTab[] {
   const groups = new Map<string, RemoteProjectTab>()
   for (const session of sessionList) {
     if (!session.remote) continue
@@ -58,7 +63,11 @@ export function remoteProjectTabs(sessionList: readonly SessionListItem[]): Remo
         // The machine's own reported name, never a folder: this tab is the
         // computer, and a folder name here would read as a second project. The
         // key prefix is labelled so a bare token does not read as a name.
-        title: machineDisplayName({ machineName: hostname, peer }),
+        title: machineDisplayName({
+          machineAlias: machineNames[peer],
+          machineName: hostname,
+          peer,
+        }),
         paths: folder === '' ? [] : [folder],
         rows: [row],
       })

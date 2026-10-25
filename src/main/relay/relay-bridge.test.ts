@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { DEFAULT_SETTINGS } from '../../shared/default-settings'
-import type { AppSettings, PairedRelayAgent, RelayStatus } from '../../shared/ipc-contracts'
+import type { AppSettings, PairedRelayAgent, RelaySettings, RelayStatus } from '../../shared/ipc-contracts'
 import type { RelayRoomInfo } from '../../shared/relay-protocol'
 import { RelaySessionBridge, type RelayManagerLike } from './relay-bridge'
 import type { RelayManagerState } from './relay-session-manager'
@@ -85,11 +85,19 @@ interface Harness {
 }
 
 function harness(
-  initial: Partial<AppSettings> = {},
+  // Relay is partial too: a test that supplies only enabled/url/peer must not
+  // restate the settings it does not care about. `harness` fills them in.
+  initial: Omit<Partial<AppSettings>, 'relay'> & { relay?: Partial<RelaySettings> } = {},
   options: { keypairError?: Error } = {},
 ): Harness {
   const state = {
-    settings: { ...DEFAULT_SETTINGS, ...initial } as AppSettings,
+    // Relay defaults are merged one level down: a test that supplies only the
+    // fields it cares about must not have to restate every other relay setting.
+    settings: {
+      ...DEFAULT_SETTINGS,
+      ...initial,
+      relay: { ...DEFAULT_SETTINGS.relay, ...initial.relay },
+    } as AppSettings,
     managers: [] as FakeManager[],
     savedAgents: [] as (PairedRelayAgent | null)[],
     disposed: [] as FakeManager[],

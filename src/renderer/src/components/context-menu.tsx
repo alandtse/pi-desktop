@@ -13,6 +13,8 @@ import {
   MessageSquare,
   StickyNote,
   Pencil,
+  RotateCcw,
+  Unlink,
   Workflow as WorkflowIcon,
 } from 'lucide-react'
 import type { Terminal as XTerm } from '@xterm/xterm'
@@ -352,6 +354,62 @@ export function buildMessageContextMenu(
     },
     ...buildDefaultContextMenu(),
   ]
+}
+
+/**
+ * Actions a machine (a paired Pi) offers. A name belongs to the machine, so the
+ * same menu serves the sidebar heading and the machine's project tab.
+ */
+export interface MachineContextMenuActions {
+  onRename: (peer: string, currentName: string) => void
+  onForgetName?: (peer: string) => void
+  onUnpair?: (peer: string) => void
+}
+
+/**
+ * Right-click menu for a paired machine, mirroring the session menu: rename the
+ * thing you are pointing at, in the place it is shown, rather than a field in a
+ * settings panel that can only ever address the one pairing.
+ */
+export function buildMachineContextMenu(
+  peer: string,
+  displayName: string,
+  options: { hasCustomName: boolean },
+  actions: MachineContextMenuActions,
+): ContextMenuItem[] {
+  const items: ContextMenuItem[] = [
+    {
+      id: 'machine-rename',
+      label: t('contextMenu.renameMachine'),
+      icon: <Pencil size={14} />,
+      action: () => actions.onRename(peer, displayName),
+    },
+  ]
+  if (options.hasCustomName && actions.onForgetName) {
+    items.push({
+      id: 'machine-forget-name',
+      label: t('contextMenu.useReportedName'),
+      icon: <RotateCcw size={14} />,
+      action: () => actions.onForgetName!(peer),
+    })
+  }
+  if (actions.onUnpair) {
+    items.push(
+      {
+        id: 'divider-machine-1',
+        label: '',
+        divider: true,
+        action: () => {},
+      },
+      {
+        id: 'machine-unpair',
+        label: t('contextMenu.unpairMachine'),
+        icon: <Unlink size={14} />,
+        action: () => actions.onUnpair!(peer),
+      },
+    )
+  }
+  return items
 }
 
 /**
