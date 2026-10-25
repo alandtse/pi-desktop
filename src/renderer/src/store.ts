@@ -1440,7 +1440,13 @@ let remoteListRefreshTimer: ReturnType<typeof setTimeout> | null = null
 export function scheduleRemoteSessionRefresh(
   get: () => AppState & AppActions,
   rooms: readonly { room_id: string }[],
+  connected: boolean,
 ): void {
+  // An empty roster is only believable when the socket says it is connected and
+  // holding a roster. Before that — `idle`, `connecting`, or a dropped socket —
+  // the empty list means "not asked yet", and acting on it would erase rows the
+  // user can see every time the connection flaps.
+  if (rooms.length === 0 && !connected) return
   const key = rooms.map((room) => room.room_id).sort().join(',')
   // Only a changed roster is worth a round trip: status also fires for
   // connection state, pairing, and room selection, most of which leave the set

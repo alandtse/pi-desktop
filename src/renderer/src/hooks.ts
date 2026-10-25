@@ -32,13 +32,23 @@ export function usePiEvents(): void {
     // relay, so the openable rows must follow that rather than wait for the
     // pairing itself to change.
     const unsubscribeRelayStatus = window.piDesktop.relay.onStatus((status) => {
-      scheduleRemoteSessionRefresh(useAppStore.getState, status.connection.rooms ?? [])
+      scheduleRemoteSessionRefresh(
+        useAppStore.getState,
+        status.connection.rooms ?? [],
+        status.connection.status === 'paired' || status.connection.status === 'connected',
+      )
     })
     // Seed from the current roster so the first push is compared against what is
     // actually listed rather than against nothing, which would refetch at boot.
     void window.piDesktop.relay
       .status()
-      .then((status) => scheduleRemoteSessionRefresh(useAppStore.getState, status.connection.rooms ?? []))
+      .then((status) =>
+        scheduleRemoteSessionRefresh(
+          useAppStore.getState,
+          status.connection.rooms ?? [],
+          status.connection.status === 'paired' || status.connection.status === 'connected',
+        ),
+      )
       .catch(() => undefined)
     const unsubscribeCounts = window.piDesktop.onPendingPrompts(handlePendingPromptCounts)
     const unsubscribeActivity = window.piDesktop.onWorkspaceActivity(handleWorkspaceActivity)

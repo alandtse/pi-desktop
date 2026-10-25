@@ -2948,7 +2948,7 @@ test('a session opening on the paired machine refreshes the rows without a manua
     },
     ref: { peer: 'peer', roomId: 'room-new', hostname: 'mac' },
   }]
-  scheduleRemoteSessionRefresh(useAppStore.getState, [{ room_id: 'room-new' }])
+  scheduleRemoteSessionRefresh(useAppStore.getState, [{ room_id: 'room-new' }], true)
   await new Promise((resolve) => setTimeout(resolve, 400))
   const rowsAfter = useAppStore.getState().sessionList.filter((item) => item.remote)
   assert.equal(rowsAfter.length, 1, 'the new room became a row')
@@ -2956,8 +2956,31 @@ test('a session opening on the paired machine refreshes the rows without a manua
   // for connection and selection changes, and a refetch per one of those is the
   // storm this coalescing exists to prevent.
   const before = relaySessionCalls
-  scheduleRemoteSessionRefresh(useAppStore.getState, [{ room_id: 'room-new' }])
+  scheduleRemoteSessionRefresh(useAppStore.getState, [{ room_id: 'room-new' }], true)
   await new Promise((resolve) => setTimeout(resolve, 400))
   const after = relaySessionCalls
   assert.equal(after, before, 'an unchanged roster is not refetched')
+})
+
+test('a flapping connection does not erase the rows already listed', async () => {
+  remoteSessionRows = [{
+    session: {
+      path: 'remote://peer/room-a', name: 'Chat', preview: null, sessionId: 'room-a',
+      lastModified: 0, messageCount: 0, projectPath: '/Users/alandtse', projectName: 'alandtse',
+      remote: { peer: 'peer', roomId: 'room-a', hostname: 'mac' },
+    },
+    ref: { peer: 'peer', roomId: 'room-a', hostname: 'mac' },
+  }]
+  scheduleRemoteSessionRefresh(useAppStore.getState, [{ room_id: 'room-a' }], true)
+  await new Promise((resolve) => setTimeout(resolve, 400))
+  assert.equal(useAppStore.getState().sessionList.filter((i) => i.remote).length, 1, 'the row is listed')
+
+  // A reconnect reports an empty roster before the relay has answered, which is
+  // "not asked yet", not "this machine has no sessions".
+  const callsBefore = relaySessionCalls
+  remoteSessionRows = []
+  scheduleRemoteSessionRefresh(useAppStore.getState, [], false)
+  await new Promise((resolve) => setTimeout(resolve, 400))
+  assert.equal(relaySessionCalls, callsBefore, 'an unconnected empty roster is not even fetched')
+  assert.equal(useAppStore.getState().sessionList.filter((i) => i.remote).length, 1, 'the row survives')
 })
