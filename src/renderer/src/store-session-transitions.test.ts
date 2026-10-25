@@ -14,6 +14,8 @@ import type {
 import { continuationPrompt } from '../../shared/interrupted-turn'
 import { isSameSessionShown } from './store'
 import type { PreviewTarget } from './store'
+// The store is imported dynamically below (module-level singletons need resetting
+// per suite), so the refresh helper is reached through that binding too.
 
 // Each recorded call is appended to `calls`, so tests can assert both that a
 // session change reached Pi and that nothing reached Pi when it was declined.
@@ -52,6 +54,10 @@ let switchHook: (() => void) | null = null
 // Gates the stubbed getMessages so a test can observe what is on screen while a
 // refresh is still in flight.
 let getMessagesGate: (() => Promise<void>) | null = null
+// What the stubbed relay reports as the paired machine's open sessions. Reset
+// per test because a room left over from a previous test would look like one.
+let remoteSessionRows: { session: SessionListItem; ref: RemoteSessionRef }[] = []
+let relaySessionCalls = 0
 // What the stubbed getMessages reports as the session's history.
 let getMessagesResult: unknown[] = []
 // The interruption reason the stub reports for a resumed session.
@@ -216,7 +222,10 @@ const piDesktopStub = {
       calls.push(`relayOpen:${ref.peer}:${ref.roomId}`)
       return { ref, sessionName: 'remote', sessionStartedAt: 0, truncated: false, events: [] }
     },
-    sessions: async () => [],
+    sessions: async () => {
+      relaySessionCalls += 1
+      return remoteSessionRows
+    },
     sendPrompt: async (text: string) => {
       calls.push(`relayPrompt:${text}`)
       return { ok: true }
@@ -285,6 +294,7 @@ const piDesktopStub = {
 
 type AppStore = typeof import('./store')['useAppStore']
 let useAppStore: AppStore
+let scheduleRemoteSessionRefresh: typeof import('./store')['scheduleRemoteSessionRefresh']
 let countPromptsWaitingElsewhere: typeof import('./store')['countPromptsWaitingElsewhere']
 let formatPromptsWaiting: typeof import('./store')['formatPromptsWaiting']
 let sidePanelHidesPreview: typeof import('./store')['sidePanelHidesPreview']
@@ -296,7 +306,7 @@ let NOTIFY_TOAST_Z_INDEX: number
 // to exist before the module body runs — hence the deferred import.
 before(async () => {
   ;(globalThis as unknown as { window: unknown }).window = { piDesktop: piDesktopStub }
-  ;({ useAppStore, countPromptsWaitingElsewhere, formatPromptsWaiting, sidePanelHidesPreview } = await import('./store'))
+  ;({ useAppStore, countPromptsWaitingElsewhere, formatPromptsWaiting, sidePanelHidesPreview, scheduleRemoteSessionRefresh } = await import('./store'))
   ;({ openFileFromChat } = await import('./components/chat-file-link'))
   ;({ DIALOG_OVERLAY_Z_INDEX, NOTIFY_TOAST_Z_INDEX } = await import('./components/extension-ui-dialog'))
 })
@@ -348,6 +358,8 @@ function answerConfirm(confirmed: boolean): void {
 }
 
 beforeEach(() => {
+  remoteSessionRows = []
+  relaySessionCalls = 0
   if (answerPoll !== null) {
     clearInterval(answerPoll)
     answerPoll = null
@@ -2919,4 +2931,33 @@ test('a cached chat is on screen while its switch is still in flight', async () 
   switchHook = null
 
   assert.ok(paintedDuringSwitch > 0, 'the cached transcript is painted before the switch answers')
+})
+
+test('a session opening on the paired machine refreshes the rows without a manual action', async () => {
+  // The relay pushes room_announced when the paired Pi opens or resumes a
+  // session. The openable rows used to be fetched only when the pairing key
+  // changed, so a session started during a run never appeared until the app was
+  // restarted — the user asked for it to populate by itself.
+  const rowsBefore = useAppStore.getState().sessionList.filter((item) => item.remote)
+  assert.equal(rowsBefore.length, 0, 'starts with no remote rows')
+  remoteSessionRows = [{
+    session: {
+      path: 'remote://peer/room-new', name: 'New chat', preview: null, sessionId: 'room-new',
+      lastModified: 0, messageCount: 0, projectPath: '/Users/alandtse', projectName: 'alandtse',
+      remote: { peer: 'peer', roomId: 'room-new', hostname: 'mac' },
+    },
+    ref: { peer: 'peer', roomId: 'room-new', hostname: 'mac' },
+  }]
+  scheduleRemoteSessionRefresh(useAppStore.getState, [{ room_id: 'room-new' }])
+  await new Promise((resolve) => setTimeout(resolve, 400))
+  const rowsAfter = useAppStore.getState().sessionList.filter((item) => item.remote)
+  assert.equal(rowsAfter.length, 1, 'the new room became a row')
+  // The same roster must not cause another fetch: a status payload also fires
+  // for connection and selection changes, and a refetch per one of those is the
+  // storm this coalescing exists to prevent.
+  const before = relaySessionCalls
+  scheduleRemoteSessionRefresh(useAppStore.getState, [{ room_id: 'room-new' }])
+  await new Promise((resolve) => setTimeout(resolve, 400))
+  const after = relaySessionCalls
+  assert.equal(after, before, 'an unchanged roster is not refetched')
 })

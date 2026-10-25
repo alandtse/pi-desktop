@@ -1428,6 +1428,42 @@ function isActiveSessionListed(state: AppState): boolean {
   return !!sessionFile && state.sessionList.some((item) => item.path === sessionFile)
 }
 
+/**
+ * Re-reads the paired machine's sessions after a roster change.
+ *
+ * The relay pushes `room_announced`, `room_meta_updated` and `room_ended` per
+ * session, so the row list goes stale the moment the paired machine opens or
+ * closes one. Coalesced because a machine opening several sessions at once
+ * pushes one frame each.
+ */
+let remoteListRefreshTimer: ReturnType<typeof setTimeout> | null = null
+export function scheduleRemoteSessionRefresh(
+  get: () => AppState & AppActions,
+  rooms: readonly { room_id: string }[],
+): void {
+  const key = rooms.map((room) => room.room_id).sort().join(',')
+  // Only a changed roster is worth a round trip: status also fires for
+  // connection state, pairing, and room selection, most of which leave the set
+  // of sessions exactly as it was.
+  if (key === lastRemoteRoomKey) return
+  lastRemoteRoomKey = key
+  if (remoteListRefreshTimer) clearTimeout(remoteListRefreshTimer)
+  remoteListRefreshTimer = setTimeout(() => {
+    remoteListRefreshTimer = null
+    // The key is committed only once the refresh lands, so a failed fetch is
+    // not remembered as done: the next push retries instead of assuming the
+    // rows are current.
+    void get()
+      .refreshRemoteSessions()
+      .catch(() => {
+        lastRemoteRoomKey = null
+      })
+  }, SESSION_LIST_REFRESH_DELAY_MS)
+}
+// The room set the row list was last built from. Module-level because it
+// describes what is already on screen, not what this render wants.
+let lastRemoteRoomKey: string | null = null
+
 function scheduleSessionListRefresh(get: () => AppState & AppActions): void {
   if (sessionListRefreshTimer) clearTimeout(sessionListRefreshTimer)
   sessionListRefreshTimer = setTimeout(() => {
@@ -2731,7 +2767,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
     // Remote sessions are appended AFTER the local list settles. They are not
     // files on this disk and their enumeration can take a round trip to the
     // relay, so failing or stalling there must never hide the local sessions.
-    void get().refreshRemoteSessions()
+    void get().refreshRemoteSessions().catch(() => undefined)
   },
 
   /**
@@ -2751,7 +2787,9 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
       // repeated `rooms_check` reply, so a transient timeout here is normal and
       // says nothing about the sessions still running on the paired Pi.
       console.warn('[relay] session refresh failed', error)
-      return
+      // Rethrown so the caller can tell a failed refresh from an empty one: a
+      // swallowed failure would look like "this machine has no sessions".
+      throw error
     }
     const remote = rows.map((row) => row.session)
     set((state) => ({

@@ -39,7 +39,7 @@ import { SessionRuntimeIndicator } from './session-runtime-indicator'
 import { resolveRunSessionId } from '../utils/workflow-runs'
 import { useGlobalWorkflowOpen } from '../hooks'
 import { clampSidebarWidth, resolveSidebarWidth } from '../../../shared/sidebar-width'
-import type { RemoteSessionRef, RemoteSessionRow, RelayStatus, SessionListItem } from '../../../shared/ipc-contracts'
+import type { RemoteSessionRef, RelayStatus, SessionListItem } from '../../../shared/ipc-contracts'
 import { isImeComposing } from '../utils/ime-composing'
 
 /** Views reachable from the sidebar's Tools group. */
@@ -96,7 +96,6 @@ export function Sidebar(): React.JSX.Element {
   // source. `remoteSessions` are the openable rows, `rooms` are what the panel's
   // room dropdown shows.
   const [remote, setRemote] = useState<RelayStatus | null>(null)
-  const [remoteSessions, setRemoteSessions] = useState<RemoteSessionRow[]>([])
   const [remoteOpen, setRemoteOpen] = useState(true)
   const openRemoteSession = useAppStore((state) => state.openRemoteSession)
   const activeRemoteRef = useAppStore((state) => state.activeRemoteRef)
@@ -106,26 +105,18 @@ export function Sidebar(): React.JSX.Element {
     return window.piDesktop.relay.onStatus(setRemote)
   }, [])
 
-  // The openable session rows, which is what this section is for. Fetched
-  // alongside the roster rather than instead of it: the rooms drive the panel's
-  // selector, the rows drive navigation.
-  const pairedPubkey = remote?.settings.pairedAgent?.pubkey
-  useEffect(() => {
-    if (!pairedPubkey) return
-    void window.piDesktop.relay
-      .sessions()
-      .then(setRemoteSessions)
-      .catch(() => {
-        // No session open on the other end, or it is on a different relay. An
-        // empty remote section is the honest representation here.
-      })
-    void window.piDesktop.relay
-      .listRooms()
-      .then((rooms) => setRemote((prev) => (prev ? { ...prev, connection: { ...prev.connection, rooms } } : prev)))
-      .catch(() => {
-        // Covered by the empty-state above.
-      })
-  }, [pairedPubkey])
+  // The openable session rows. The store owns fetching them and refreshes on
+  // every roster change the relay pushes, so this list follows a session opening
+  // or ending on the paired machine instead of waiting for a manual refresh.
+  // Derived, not selected: a selector that builds a new array on every call
+  // re-renders forever, because zustand compares by identity.
+  const remoteSessions = useMemo(
+    () =>
+      sessionList
+        .filter((item) => item.remote)
+        .map((session) => ({ session, ref: session.remote as RemoteSessionRef })),
+    [sessionList],
+  )
 
   // A room list of zero means either no pairing or no session open on the other
   // end; both should render nothing rather than an empty section that looks

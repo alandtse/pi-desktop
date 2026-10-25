@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useCallback, useState, useSyncExternalStore } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useAppStore, type ChatSidePanel } from './store'
+import { scheduleRemoteSessionRefresh, useAppStore, type ChatSidePanel } from './store'
 import { getAppliedThemeId, subscribeAppliedTheme } from './utils/theme'
 import { DEFAULT_SETTINGS } from '../../shared/default-settings'
 import { withGuiCommands, type GuiCommand, type PiCommand } from '../../shared/pi-command'
@@ -28,6 +28,18 @@ export function usePiEvents(): void {
     // Live output from a Pi on another machine. Frames carry the room they
     // belong to; the store drops anything not on screen.
     const unsubscribeRelay = window.piDesktop.relay.onFrame(handleRelayFrame)
+    // A session opening or closing on the paired machine is announced on the
+    // relay, so the openable rows must follow that rather than wait for the
+    // pairing itself to change.
+    const unsubscribeRelayStatus = window.piDesktop.relay.onStatus((status) => {
+      scheduleRemoteSessionRefresh(useAppStore.getState, status.connection.rooms ?? [])
+    })
+    // Seed from the current roster so the first push is compared against what is
+    // actually listed rather than against nothing, which would refetch at boot.
+    void window.piDesktop.relay
+      .status()
+      .then((status) => scheduleRemoteSessionRefresh(useAppStore.getState, status.connection.rooms ?? []))
+      .catch(() => undefined)
     const unsubscribeCounts = window.piDesktop.onPendingPrompts(handlePendingPromptCounts)
     const unsubscribeActivity = window.piDesktop.onWorkspaceActivity(handleWorkspaceActivity)
     const unsubscribeSessionRuntime = window.piDesktop.onSessionRuntime(handleSessionRuntime)
@@ -85,6 +97,7 @@ export function usePiEvents(): void {
       })
 
     return () => {
+      unsubscribeRelayStatus()
       unsubscribeEvent()
       unsubscribeRelay()
       unsubscribeCounts()
