@@ -78,9 +78,11 @@ function registerRelayPairingHandlers(bridge: RelaySessionBridge): void {
     return bridge.setMachineName(peer, name)
   })
 
-  ipcMain.handle(IPC_CHANNELS.RELAY_UNPAIR, async (event) => {
+  ipcMain.handle(IPC_CHANNELS.RELAY_UNPAIR, async (event, target: unknown) => {
     assertTrustedSender(event)
-    return bridge.unpair()
+    // An absent target drops every machine, which is what the panel's single
+    // Unpair means; a named one drops just that machine.
+    return bridge.unpair(typeof target === 'string' && target !== '' ? target : undefined)
   })
 }
 

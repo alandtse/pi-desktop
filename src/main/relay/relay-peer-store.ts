@@ -21,6 +21,14 @@ export interface RelayPeerRecord {
     roomId: string | null
     pairedAt: string
   } | null
+  /**
+   * Every machine paired with this desktop.
+   *
+   * `target` is what older records hold and is still written for compatibility
+   * with a store laid down before several machines were supported; this list is
+   * the authoritative set.
+   */
+  targets?: RelayPeerRecord['target'][]
 }
 
 const STORE_VERSION = 1
@@ -65,7 +73,12 @@ export async function readRelayPeer(userDataDir: string): Promise<RelayPeerRecor
     appLog.warn('relay', 'Stored relay keypair does not match its public key; ignoring it')
     return null
   }
-  return { keypair: stored.keypair, target: stored.target ?? null }
+  // A store written before several machines were supported has only `target`, so
+  // it is folded into the list rather than dropped: the existing pairing keeps
+  // working without the user re-pairing.
+  const targets = Array.isArray(stored.targets) ? stored.targets : []
+  const merged = targets.length > 0 ? targets : stored.target ? [stored.target] : []
+  return { keypair: stored.keypair, target: merged[0] ?? null, targets: merged }
 }
 
 /** Writes the record atomically, so a crash cannot leave half a keypair. */

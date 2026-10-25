@@ -46,6 +46,15 @@ export interface RelayRoomInfo {
   thinking?: string
   working?: boolean
   started_at?: number
+  /**
+   * The machine that owns the room.
+   *
+   * Set when several machines are paired: the relay already says which peer a
+   * `rooms` frame came from, and the roster is kept per peer, so a row needs this
+   * to be addressed back to the right machine. Absent for a single pairing, where
+   * the peer is unambiguous.
+   */
+  peer?: string
 }
 
 /** One option in a pi-ask question. `freeform` allows a typed answer. */

@@ -99,16 +99,26 @@ export function createRelayBridge(workspaceManager: WorkspaceManager): RelaySess
     settings,
     peers,
     createManager: async (relayUrl, keypair, agent) => {
+      const machineList = (await settings.read()).relay.pairedAgents
       const transport = new RelayClientTransport(relayUrl, keypair)
       return new RelaySessionManager({
         transport,
         initialAgent: agent,
+        initialAgents: machineList,
         // A room repaired from the roster must outlive the process, or the next
         // launch addresses the room that just died.
         onAdopted: async (adopted) => {
           await peers.save(adopted)
           const current = await settings.read()
-          await settings.write({ relay: { ...current.relay, pairedAgent: adopted } })
+          await settings.write({
+            relay: {
+              ...current.relay,
+              pairedAgent: adopted,
+              pairedAgents: current.relay.pairedAgents.map((machine) =>
+                machine.pubkey === adopted.pubkey ? adopted : machine,
+              ),
+            },
+          })
         },
       })
     },

@@ -24,15 +24,28 @@ export type RelayManagerStatus = 'idle' | 'connecting' | 'connected' | 'paired' 
 export interface RelayManagerState {
   status: RelayManagerStatus
   detail?: string
-  /** Rooms the paired Pi currently advertises (one per live session). */
+  /**
+   * Every paired machine's rooms, keyed by peer.
+   *
+   * Keyed rather than a flat list because each machine answers with its own
+   * roster: a `rooms` frame names the peer it came from, and two machines replying
+   * in turn must not overwrite each other. `rooms` below is the flattened view.
+   */
+  roomsByPeer: Record<string, RelayRoomInfo[]>
+  /** Rooms every paired Pi currently advertises (one per live session). */
   rooms: RelayRoomInfo[]
+  /** The machine this socket is pointed at, which is what a frame is addressed to. */
   agent: PairedRelayAgent | null
+  /** Every machine this desktop is paired with, in pairing order. */
+  agents: PairedRelayAgent[]
 }
 
 export interface RelayManagerOptions {
   transport: RelayTransport
   /** Where the pairing target (pubkey and name) is remembered between runs. */
   initialAgent?: PairedRelayAgent | null
+  /** Every machine remembered between runs, in pairing order. */
+  initialAgents?: PairedRelayAgent[]
   /** Persists a successful pairing; awaited so a crash cannot lose the credential. */
   onPaired?: (agent: PairedRelayAgent) => Promise<void> | void
   /**
@@ -84,12 +97,26 @@ export class RelaySessionManager extends EventEmitter {
   constructor(private readonly options: RelayManagerOptions) {
     super()
     this.requestTimeoutMs = options.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS
-    this.state = { status: 'idle', rooms: [], agent: options.initialAgent ?? null }
+    const initialAgents = options.initialAgents ?? (options.initialAgent ? [options.initialAgent] : [])
+    this.state = {
+      status: 'idle',
+      rooms: [],
+      roomsByPeer: {},
+      // The selected machine is whichever the stored list names first unless the
+      // caller pointed at a specific one.
+      agent: options.initialAgent ?? initialAgents[0] ?? null,
+      agents: initialAgents,
+    }
     this.wireTransport()
   }
 
   getState(): RelayManagerState {
-    return { ...this.state, rooms: [...this.state.rooms] }
+    return {
+      ...this.state,
+      rooms: [...this.state.rooms],
+      roomsByPeer: { ...this.state.roomsByPeer },
+      agents: [...this.state.agents],
+    }
   }
 
   /** Notifies on every internal state change; returns an unsubscribe function. */
@@ -142,13 +169,35 @@ export class RelaySessionManager extends EventEmitter {
    * this must run on every `connected` transition, not just the first.
    */
   private subscribeToRoster(): void {
-    const agent = this.state.agent
-    if (!agent) return
-    this.options.transport.sendControl({ type: 'subscribe_rooms', peers: [agent.pubkey] })
+    // Every paired machine, in ONE control frame: the relay accepts a peer list,
+    // so this is a single round trip rather than one per machine.
+    const peers = this.pairedPeers()
+    if (peers.length === 0) return
+    this.options.transport.sendControl({ type: 'subscribe_rooms', peers })
     // Subscribing only registers interest; the relay pushes the CURRENT roster
     // to nobody, so without this check the list stays empty until some session
     // happens to start or stop. It also feeds room adoption on startup.
-    this.options.transport.sendControl({ type: 'rooms_check', peers: [agent.pubkey] })
+    this.options.transport.sendControl({ type: 'rooms_check', peers })
+  }
+
+  /** The peer keys of every paired machine, the selected one first. */
+  private pairedPeers(): string[] {
+    const selected = this.state.agent?.pubkey
+    const peers = this.state.agents.map((machine) => machine.pubkey)
+    if (selected && !peers.includes(selected)) peers.unshift(selected)
+    else if (selected) peers.sort((a, b) => (a === selected ? -1 : b === selected ? 1 : 0))
+    return peers
+  }
+
+  /** Rebuilds the flattened room list and tags each room with its machine. */
+  private patchRooms(roomsByPeer: Record<string, RelayRoomInfo[]>): void {
+    const rooms: RelayRoomInfo[] = []
+    for (const machine of this.state.agents) {
+      for (const room of roomsByPeer[machine.pubkey] ?? []) rooms.push({ ...room, peer: machine.pubkey })
+    }
+    // A roster can arrive for a peer this desktop has since unpaired; those rooms
+    // are dropped rather than shown as rows that cannot be opened.
+    this.patch({ roomsByPeer, rooms })
   }
 
   private patch(partial: Partial<RelayManagerState>): void {
@@ -249,6 +298,15 @@ export class RelaySessionManager extends EventEmitter {
   async listRooms(): Promise<RelayRoomInfo[]> {
     const target = this.requirePaired()
     await this.ensureConnected()
+    // Every paired machine, not just the selected one: the sidebar lists all of
+    // them, so a machine it never asks about would look like it had no sessions.
+    for (const peer of this.pairedPeers()) {
+      if (this.rosterReplies.has(peer) || this.rosterRequests.has(peer)) continue
+      this.rosterRequests.add(peer)
+      if (!this.options.transport.sendControl({ type: 'rooms_check', peers: [peer] })) {
+        this.rosterRequests.delete(peer)
+      }
+    }
 
     // The relay dedups a `rooms_check` reply per (connection, peer): the first
     // answer is always sent and every identical snapshot after it is dropped. So
@@ -269,6 +327,8 @@ export class RelaySessionManager extends EventEmitter {
       }
     }
 
+    // The selected machine is what the caller acts on, so its roster is the one
+    // worth waiting for; the others fill in from the pushes that follow.
     await this.waitForRoster(target.peer)
     return this.getState().rooms
   }
@@ -428,18 +488,29 @@ export class RelaySessionManager extends EventEmitter {
    * exact `(peer, room)` pair. Without a choice here, prompts would have no
    * target whenever a Pi has more than one room open.
    */
-  async selectRoom(roomId: string): Promise<PairedRelayAgent> {
-    const agent = this.state.agent
-    if (!agent) throw new Error('This desktop is not paired with a Pi yet')
-    const known = this.state.rooms.some((room) => room.room_id === roomId)
+  async selectRoom(roomId: string, peer?: string): Promise<PairedRelayAgent> {
+    // Which MACHINE owns the room decides where the frames go, so the machine is
+    // resolved first: with several paired Pis a room id alone is ambiguous, and
+    // addressing the wrong peer silently delivers nothing.
+    const owner =
+      (peer ? this.state.agents.find((machine) => machine.pubkey === peer) : undefined) ??
+      this.state.agents.find((machine) =>
+        (this.state.roomsByPeer[machine.pubkey] ?? []).some((room) => room.room_id === roomId),
+      )
+    if (!owner) {
+      const selected = this.state.agent
+      if (!selected) throw new Error('This desktop is not paired with a Pi yet')
+      throw new Error('That session is no longer open on the paired Pi')
+    }
+    const known = (this.state.roomsByPeer[owner.pubkey] ?? []).some((room) => room.room_id === roomId)
     if (!known) {
       // A row outlives the session it names: the Pi may have closed it since the
       // roster was pushed. Re-asking makes the stale row disappear instead of
       // leaving the user clicking it again.
-      this.options.transport.sendControl({ type: 'rooms_check', peers: [agent.pubkey] })
+      this.options.transport.sendControl({ type: 'rooms_check', peers: [owner.pubkey] })
       throw new Error('That session is no longer open on the paired Pi')
     }
-    const selected: PairedRelayAgent = { ...agent, roomId }
+    const selected: PairedRelayAgent = { ...owner, roomId }
     this.patch({ agent: selected })
     await this.options.onPaired?.(selected)
     return selected
@@ -517,7 +588,8 @@ export class RelaySessionManager extends EventEmitter {
     // A roster push names the peer it describes, so it is filtered by the same
     // pubkey check rather than trusted because it arrived first.
     if (message.type === 'rooms') {
-      this.patch({ rooms: message.rooms ?? [] })
+      const tagged = (message.rooms ?? []).map((room) => ({ ...room, peer: meta.peer }))
+      this.patchRooms({ ...this.state.roomsByPeer, [meta.peer]: tagged })
       // A `rooms_check` reply settles the matching wait; a broadcast also counts,
       // because either way the roster we now hold is fresh.
       this.rosterReplies.add(meta.peer)
@@ -531,9 +603,10 @@ export class RelaySessionManager extends EventEmitter {
     // so folding these in is what keeps the list correct after the one initial
     // `rooms_check` — without it the list only changes on reconnect.
     if (message.type === 'room_announced') {
-      const announced = toRoomInfo(message)
-      const withoutIt = this.state.rooms.filter((room) => room.room_id !== announced.room_id)
-      this.patch({ rooms: [...withoutIt, announced] })
+      const announced = { ...toRoomInfo(message), peer: meta.peer }
+      const peerRooms = this.state.roomsByPeer[meta.peer] ?? []
+      const withoutIt = peerRooms.filter((room) => room.room_id !== announced.room_id)
+      this.patchRooms({ ...this.state.roomsByPeer, [meta.peer]: [...withoutIt, announced] })
       this.adoptRoomFromRoster()
       return
     }
@@ -542,15 +615,20 @@ export class RelaySessionManager extends EventEmitter {
       // Only sessions we already know about are patched: a meta frame names a
       // room but carries no cwd or name, so inventing an entry from it would put
       // a row in the list that the user cannot open.
-      const rooms = this.state.rooms.map((room) =>
+      const peerRooms = this.state.roomsByPeer[meta.peer] ?? []
+      const patched = peerRooms.map((room) =>
         room.room_id === message.room_id ? { ...room, ...message.meta } : room,
       )
-      this.patch({ rooms })
+      this.patchRooms({ ...this.state.roomsByPeer, [meta.peer]: patched })
       return
     }
 
     if (message.type === 'room_ended') {
-      this.patch({ rooms: this.state.rooms.filter((room) => room.room_id !== message.room_id) })
+      const peerRooms = this.state.roomsByPeer[meta.peer] ?? []
+      this.patchRooms({
+        ...this.state.roomsByPeer,
+        [meta.peer]: peerRooms.filter((room) => room.room_id !== message.room_id),
+      })
       return
     }
 

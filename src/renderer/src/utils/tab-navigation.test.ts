@@ -216,6 +216,14 @@ test('a machine is named the same way wherever it is shown', () => {
 
   // The Pi's agent name must never be used: it names a session, so one machine
   // showed up as "open-shaders" — the label the user reported as wrong.
+  // A machine that has no session open still gets its tab: without this a machine
+  // disappears from the strip when it closes its last chat, which reads as an
+  // unpairing.
+  const empties = remoteProjectTabs([], {}, [{ pubkey: 'peerC', machineName: 'Workstation' }])
+  assert.deepEqual(empties.map((p) => p.title), ['Workstation'])
+  assert.equal(empties[0]?.rows.length, 0)
+  assert.equal(empties[0]?.id, 'remoteMachine:peerC')
+
   assert.equal(
     machineDisplayName({ peer }),
     'Paired Pi hKqfHH3r',

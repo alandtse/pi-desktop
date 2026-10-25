@@ -1499,6 +1499,16 @@ export interface RelaySettings {
   /** The Pi this desktop is paired with, as shown in the Relay panel. */
   pairedAgent: PairedRelayAgent | null
   /**
+   * Every machine this desktop is paired with.
+   *
+   * `pairedAgent` is the ONE machine the panel and the tab strip were built
+   * around, and it is kept because a relay socket carries a single room selection
+   * at a time; this list is the whole set, so several machines can each contribute
+   * their own project tab and their own rows. Order is pairing order, which keeps
+   * the tab strip stable across restarts.
+   */
+  pairedAgents: PairedRelayAgent[]
+  /**
    * Names the user gave machines, keyed by the machine's peer key.
    *
    * Keyed rather than stored on the pairing because a name belongs to a MACHINE,

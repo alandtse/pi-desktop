@@ -46,32 +46,43 @@ export function remoteProjectTabs(
   // Names the user gave machines, keyed by peer key. Passed in rather than read
   // from the store so this stays a pure function.
   machineNames: Readonly<Record<string, string>> = {},
+  // Every paired machine, so one that currently has no session open still gets
+  // its tab. Without this a machine vanishes from the strip the moment it closes
+  // its last session, which reads as an unpairing.
+  pairedAgents: readonly { pubkey: string; machineName?: string }[] = [],
 ): RemoteProjectTab[] {
   const groups = new Map<string, RemoteProjectTab>()
+  const addMachine = (peer: string, machineName?: string): RemoteProjectTab => {
+    const existing = groups.get(peer)
+    if (existing) return existing
+    const tab: RemoteProjectTab = {
+      id: `remoteMachine:${peer}`,
+      // The machine's own reported name, never a folder: this tab is the
+      // computer, and a folder name here would read as a second project. The key
+      // prefix is labelled so a bare token does not read as a name.
+      title: machineDisplayName({
+        machineAlias: machineNames[peer],
+        machineName,
+        peer,
+      }),
+      paths: [],
+      rows: [],
+    }
+    groups.set(peer, tab)
+    return tab
+  }
+
+
+
+  for (const machine of pairedAgents) addMachine(machine.pubkey, machine.machineName)
+
   for (const session of sessionList) {
     if (!session.remote) continue
     const { peer, roomId, hostname } = session.remote
     const folder = session.projectPath || session.projectName || ''
-    const existing = groups.get(peer)
-    const row = { session, ref: { peer, roomId, hostname } }
-    if (existing) {
-      existing.rows.push(row)
-      if (folder !== '' && !existing.paths.includes(folder)) existing.paths.push(folder)
-    } else {
-      groups.set(peer, {
-        id: `remoteMachine:${peer}`,
-        // The machine's own reported name, never a folder: this tab is the
-        // computer, and a folder name here would read as a second project. The
-        // key prefix is labelled so a bare token does not read as a name.
-        title: machineDisplayName({
-          machineAlias: machineNames[peer],
-          machineName: hostname,
-          peer,
-        }),
-        paths: folder === '' ? [] : [folder],
-        rows: [row],
-      })
-    }
+    const tab = addMachine(peer, hostname)
+    tab.rows.push({ session, ref: { peer, roomId, hostname } })
+    if (folder !== '' && !tab.paths.includes(folder)) tab.paths.push(folder)
   }
   return [...groups.values()]
 }

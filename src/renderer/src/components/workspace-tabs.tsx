@@ -82,8 +82,15 @@ export function WorkspaceTabs(): React.JSX.Element {
   // A session on another machine belongs to a folder THERE, so it is a project
   // tab of its own rather than a chat inside whichever local project is active.
   const remoteProjects = useMemo(
-    () => remoteProjectTabs(sessionList, relayStatus?.settings.machineNames ?? {}),
-    [sessionList, relayStatus?.settings.machineNames],
+    () =>
+      remoteProjectTabs(
+        sessionList,
+        relayStatus?.settings.machineNames ?? {},
+        relayStatus?.settings.pairedAgents ?? [],
+      ),
+    // pairedAgents belongs here: pairing a machine with no sessions yet must add
+    // its tab, and that list changes without sessionList changing.
+    [sessionList, relayStatus?.settings.machineNames, relayStatus?.settings.pairedAgents],
   )
   const activeRemoteProjectId = useMemo(() => {
     if (!activeRemoteRef) return null

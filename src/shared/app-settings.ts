@@ -63,8 +63,37 @@ function normalizeRelaySettings(value: unknown): RelaySettings {
     enabled: url !== null && candidate.enabled === true,
     url,
     pairedAgent: normalizePairedAgent(candidate.pairedAgent),
+    // MIGRATION: a settings file written before several machines were supported
+    // stores one `pairedAgent` and no list. Seeding the list from it keeps the
+    // existing pairing working without the user re-pairing.
+    pairedAgents: normalizePairedAgents(candidate.pairedAgents, candidate.pairedAgent),
     machineNames: normalizeMachineNames(candidate.machineNames),
   }
+}
+
+/**
+ * Every machine this desktop is paired with.
+ *
+ * A malformed entry is dropped rather than repaired: a pairing carries a key, and
+ * guessing at a half-trusted one would address frames to the wrong machine. A
+ * duplicate is collapsed so two entries cannot name the same machine and produce
+ * two tabs for it.
+ */
+function normalizePairedAgents(list: unknown, legacy: unknown): PairedRelayAgent[] {
+  const fallback = normalizePairedAgent(legacy)
+  if (!Array.isArray(list)) return fallback ? [fallback] : []
+  const seen = new Set<string>()
+  const agents: PairedRelayAgent[] = []
+  for (const entry of list) {
+    const agent = normalizePairedAgent(entry)
+    if (!agent || seen.has(agent.pubkey)) continue
+    seen.add(agent.pubkey)
+    agents.push(agent)
+  }
+  // A list that lost every entry still describes the legacy pairing, so fall back
+  // rather than silently forgetting a machine the user is relying on.
+  if (agents.length === 0 && fallback) return [fallback]
+  return agents
 }
 
 /**

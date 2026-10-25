@@ -220,7 +220,9 @@ test('listing rooms asks the relay and waits for the roster reply', async () => 
   // resolve, which is the bug this covers: the panel used to show a stale list.
   transport.deliver({ type: 'rooms', peer: PI_PUBKEY, rooms: [ROOM] } as never)
 
-  assert.deepEqual(await listing, [ROOM])
+  // Every room is tagged with the machine that reported it, so a row can be
+  // addressed back to the right Pi once several are paired.
+  assert.deepEqual(await listing, [{ ...ROOM, peer: PI_PUBKEY }])
 })
 
 test('listing rooms fails loudly when the Paired Pi never answers', async () => {

@@ -13,7 +13,7 @@ class FakeManager implements RelayManagerLike {
   connected = false
   disconnected = false
   sent: string[] = []
-  state: RelayManagerState = { status: 'idle', rooms: [], agent: null }
+  state: RelayManagerState = { status: 'idle', rooms: [], roomsByPeer: {}, agent: null, agents: [] }
   private readonly changeListeners = new Set<(state: RelayManagerState) => void>()
 
   onChange(listener: (state: RelayManagerState) => void): () => void {

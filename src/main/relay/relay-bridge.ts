@@ -52,7 +52,7 @@ export interface RelayManagerLike {
   disconnect(): void
   pair(input: PairingUri): Promise<PairedRelayAgent>
   listRooms(): Promise<RelayRoomInfo[]>
-  selectRoom(roomId: string): Promise<PairedRelayAgent>
+  selectRoom(roomId: string, peer?: string): Promise<PairedRelayAgent>
   syncSession(): Promise<unknown>
   sendPrompt(text: string, options?: { steer?: boolean; images?: WireImage[] }): Promise<void>
   cancel(): Promise<void>
@@ -120,7 +120,13 @@ export class RelaySessionBridge {
       settings: settings.relay,
       connection: manager
         ? manager.getState()
-        : { status: 'idle', rooms: [], agent: settings.relay.pairedAgent },
+        : {
+            status: 'idle',
+            rooms: [],
+            roomsByPeer: {},
+            agent: settings.relay.pairedAgent,
+            agents: settings.relay.pairedAgents,
+          },
     }
   }
 
@@ -143,7 +149,14 @@ export class RelaySessionBridge {
     const agent = await manager.pair(input)
     await this.deps.peers.save(agent)
     const settings = await this.deps.settings.read()
-    await this.deps.settings.write({ relay: { ...settings.relay, pairedAgent: agent } })
+    // Appended, not assigned: pairing a second machine must add a machine, and
+    // re-pairing the same one must update its entry rather than duplicate it.
+    const pairedAgents = [
+      ...settings.relay.pairedAgents.filter((machine) => machine.pubkey !== agent.pubkey),
+      agent,
+    ]
+    await this.deps.settings.write({ relay: { ...settings.relay, pairedAgent: agent, pairedAgents } })
+    await this.rebuild()
     this.emitStatus()
     return agent
   }
@@ -169,10 +182,28 @@ export class RelaySessionBridge {
     return this.getStatus()
   }
 
-  async unpair(): Promise<RelayStatus> {
-    await this.deps.peers.save(null)
+  async unpair(peer?: string): Promise<RelayStatus> {
     const settings = await this.deps.settings.read()
-    await this.deps.settings.write({ relay: { ...settings.relay, pairedAgent: null } })
+    // With an argument, only that machine is dropped; without one the whole set
+    // goes, which is what the panel's single "Unpair" button means.
+    const pairedAgents = peer
+      ? settings.relay.pairedAgents.filter((machine) => machine.pubkey !== peer)
+      : []
+    await this.deps.peers.save(pairedAgents[0] ?? null)
+    await this.deps.settings.write({
+      relay: {
+        ...settings.relay,
+        pairedAgents,
+        pairedAgent: pairedAgents[0] ?? null,
+        // A machine that is no longer paired has no name to carry, and keeping it
+        // would attach a stale label to a future machine that reused the key.
+        machineNames: Object.fromEntries(
+          Object.entries(settings.relay.machineNames).filter(
+            ([key]) => key !== peer && pairedAgents.some((machine) => machine.pubkey === key),
+          ),
+        ),
+      },
+    })
     await this.rebuild()
     return this.getStatus()
   }
@@ -224,7 +255,7 @@ export class RelaySessionBridge {
    */
   async openSession(target: RemoteSessionRef): Promise<RelayOpenResult> {
     const manager = this.requireManager()
-    await manager.selectRoom(target.roomId)
+    await manager.selectRoom(target.roomId, target.peer)
     this.emitStatus()
     const reply = await manager.syncSession()
     const history = reply as { events?: RelaySessionEvent[]; session_started_at?: number; truncated?: boolean; session_name?: string } | null
