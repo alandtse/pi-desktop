@@ -300,6 +300,7 @@
     "openLink": "打开链接",
     "openSession": "打开会话",
     "rename": "重命名…",
+    "renameMachine": "重命名机器…",
     "searchSelection": "搜索选中内容",
     "shortcuts": {
       "copy": "Ctrl+C",
@@ -309,11 +310,9 @@
       "selectAll": "Ctrl+A"
     },
     "unarchive": "取消归档",
-    "workflowRuns": "工作流运行",
-    "renameMachine": "重命名机器…",
-    "useReportedName": "使用上报的名称",
     "unpairMachine": "取消配对此机器",
-    "renameMachineTitle": "重命名机器"
+    "useReportedName": "使用上报的名称",
+    "workflowRuns": "工作流运行"
   },
   "conveyor": {
     "branches": {
@@ -1345,14 +1344,13 @@
         "description": "每台 Pi 只需配对一次。配对链接一次性使用，并且会过期。",
         "howTo": "在另一台机器上运行 /remote-pi pair，粘贴它打印的 remotepi:// 链接。",
         "label": "已配对 Pi",
-        "pair": "配对",
-        "success": "已配对。该 Pi 当前打开的会话会显示在下方。",
-        "unpair": "解除配对",
-        "renamed": "机器名称已保存。",
-        "nameLabel": "机器名称",
         "nameDescription": "显示在侧边栏和标签页中。留空则使用配对机器上报的名称。",
         "namePlaceholder": "例如 MacBook",
-        "rename": "重命名"
+        "pair": "配对",
+        "rename": "重命名",
+        "renamed": "机器名称已保存。",
+        "success": "已配对。该 Pi 当前打开的会话会显示在下方。",
+        "unpair": "解除配对"
       },
       "sessions": {
         "empty": "已配对的 Pi 当前没有打开的会话。",
@@ -1421,6 +1419,10 @@
     "showThinking": {
       "description": "在回复中显示模型思考块",
       "label": "显示思考过程"
+    },
+    "singleDollarMath": {
+      "description": "将单个美元符号之间的文本（如 $x$）显示为数学公式。开启后，$5 和 $10 这样的金额可能被误显示为公式。",
+      "label": "单美元符号公式"
     },
     "suggestNextSteps": {
       "description": "每轮结束时，{{agent}} 可以建议最多三个后续步骤，例如缺少的测试或它无法检查的工作。点击某个步骤即可将其放入消息框。保存后新开始的会话生效。",
@@ -1563,7 +1565,6 @@
     "sessionNamePlaceholder": "会话名称",
     "sessionRow": {
       "remoteBadge": "{{host}} 上的会话",
-      "remoteFallback": "远程",
       "tooltipActive": "{{title}}\n\n点击打开 · 双击重命名 · 右键查看操作",
       "tooltipInactive": "{{title}}\n\n点击打开 · 右键查看操作"
     },
@@ -1592,6 +1593,25 @@
     "emptyOmp": "未在 ~/.omp/agent/skills、~/.claude/skills 或项目 .omp/skills 中找到技能",
     "emptyPi": "未在 ~/.pi/agent/skills 或项目 .pi/skills 中找到技能",
     "emptyTitle": "未找到技能",
+    "groups": {
+      "actions": "分组操作",
+      "delete": "删除分组",
+      "deleteConfirmMessage": "删除分组“{{name}}”？其中的技能仍保持安装，并回到主列表。",
+      "deleteConfirmTitle": "删除分组？",
+      "emptyGroup": "暂无技能。选择一个技能，然后选择此分组。",
+      "groupLabel": "分组",
+      "moveDown": "下移",
+      "moveUp": "上移",
+      "namePlaceholder": "分组名称",
+      "newGroup": "新建分组",
+      "newGroupOption": "新建分组…",
+      "noGroup": "无分组",
+      "noMatches": "没有与搜索匹配的技能",
+      "noneAvailable": "这些技能均未为当前引擎安装。",
+      "rename": "重命名分组",
+      "searchPlaceholder": "搜索技能",
+      "tip": "将你的技能整理到分组中。"
+    },
     "providedByPlugin": "由已安装的插件提供",
     "refreshAriaLabel": "刷新技能",
     "runButton": "运行",
@@ -1603,7 +1623,7 @@
     },
     "modelLegend": {
       "empty": "此范围内没有模型使用记录。",
-      "tokenBreakdown": "{{input}} 输入 · {{output}} 输出"
+      "tokenBreakdown": "{{input}} 输入 · {{output}} 输出 · {{cache}} 缓存"
     },
     "overview": {
       "activeDaysLabel": "活跃天数",
@@ -1698,6 +1718,7 @@
     }
   },
   "statusBar": {
+    "cacheShare": "{{percent}}% 来自缓存",
     "compact": "压缩",
     "compactContextTitle": "压缩上下文 — 总结对话以释放空间",
     "compacting": "压缩中…",
@@ -1705,6 +1726,7 @@
     "followUpQueued_other": "{{count}} 条追问待发送",
     "gitBranch": "Git 分支：{{branch}}",
     "hideTerminal": "隐藏终端",
+    "messageCounts": "{{total}} 条消息：你发出 {{user}} 条，代理 {{assistant}} 条，工具调用 {{tools}} 次",
     "openWorkflowRuns": "打开工作流运行",
     "piError": "{{agent}} 错误",
     "piRunning": "{{agent}} 运行中（PID: {{pid}}）",
@@ -1713,12 +1735,10 @@
     "showTerminal": "显示终端",
     "steerQueued_other": "{{count}} 条引导已排队",
     "streaming": "流式输出中",
+    "tokenUsage": "词元：共 {{total}} — 输入 {{input}}，输出 {{output}}，缓存读取 {{cacheRead}}，缓存写入 {{cacheWrite}}",
     "waitingOnPromptElsewhere": "{{agent}} 在另一个工作区有询问等待回应；切换过去作答",
     "workflowCount_other": "{{count}} 个工作流",
-    "workflowsFallback": "工作流",
-    "tokenUsage": "词元：共 {{total}} — 输入 {{input}}，输出 {{output}}，缓存读取 {{cacheRead}}，缓存写入 {{cacheWrite}}",
-    "messageCounts": "{{total}} 条消息：你发出 {{user}} 条，代理 {{assistant}} 条，工具调用 {{tools}} 次",
-    "cacheShare": "{{percent}}% 来自缓存"
+    "workflowsFallback": "工作流"
   },
   "store": {
     "confirm": {

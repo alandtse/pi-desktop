@@ -6,6 +6,7 @@
  */
 import type { PermissionRule } from '../../resources/permission-rules'
 import type { LinkedTaskMode, RepoRole } from '../../resources/repo-set-map'
+import type { TokenUsage } from './token-usage'
 
 // ─── IPC Channel Names ──────────────────────────────────────────────────────
 
@@ -150,6 +151,7 @@ export const IPC_CHANNELS = {
 
   // Skills
   SKILLS_LIST: 'skills:list',
+  SKILLS_READ: 'skills:read',
   COMMANDS_LIST: 'commands:list',
   MCP_SERVERS_LIST: 'mcp:servers-list',
 
@@ -1074,26 +1076,24 @@ export interface ActivityDay {
 export interface ActivityStatsDay {
   date: string // local calendar day, YYYY-MM-DD
   messages: number // all `type === 'message'` records that day
-  tokens: number // assistant input + output tokens that day (all models)
-  tokensByModel: Record<string, number> // model id -> input + output that day
+  tokens: number // assistant input + output + cache tokens that day (all models)
+  tokensByModel: Record<string, number> // model id -> input + output + cache that day
 }
 
-export interface ActivityModelUsage {
+export interface ActivityModelUsage extends TokenUsage {
   model: string // stable model id (e.g. "claude-opus-4-8", "ornith-1.0-35b@q6_k")
   name: string | null // latest display name from models.json; null → fall back to id
-  input: number
-  output: number
 }
 
 export interface ActivityRangeStats {
   sessions: number // distinct sessions with activity in the range
   messages: number
-  totalTokens: number // input + output across all models
+  totalTokens: number // input + output + cache read + cache write across all models
   activeDays: number
   currentStreak: number // consecutive active days ending today (capped by range)
   longestStreak: number
   peakHour: number | null // busiest local hour 0..23, or null if no activity
-  models: ActivityModelUsage[] // descending by input + output
+  models: ActivityModelUsage[] // descending by total tokens
 }
 
 // Range keys are trailing-day counts: 365 ("1y"), 180 ("6mo"), 90 ("3mo"), 30, 7.
@@ -1424,6 +1424,11 @@ export interface AppSettings {
   chatWidth: ChatWidth
   showThinking: boolean
   autoScroll: boolean
+  // Read text between single dollar signs, like $x$, as math in chat. Off by
+  // default because money such as "$5 and $10" would then show as math.
+  // \(x\), \[x\], ```math blocks and `$$x$$` alone on its line are always
+  // math (see renderer utils/markdown-math.ts).
+  singleDollarMath: boolean
   permissionMode: PermissionMode
   // Workspace paths whose "this workspace has its own permission rules"
   // notice has been acknowledged. Not exposed in the Settings UI.
@@ -1439,6 +1444,8 @@ export interface AppSettings {
   // Project paths whose session group is collapsed in the Sessions panel.
   // Persisted so the collapsed/expanded layout survives navigation and restarts.
   collapsedSessionGroups: string[]
+  // User-made groups in the Skills panel. Display only: skill files never move.
+  skillGroups: import('./skill-groups').SkillGroup[]
   /** Sidebar width in pixels; clamped by `clampSidebarWidth` on read. */
   sidebarWidth: number
   // Show the Home/launcher screen on launch (Pi starts lazily on first action)

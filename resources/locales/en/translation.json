@@ -309,6 +309,7 @@
     "openLink": "Open Link",
     "openSession": "Open Session",
     "rename": "Rename…",
+    "renameMachine": "Rename machine…",
     "searchSelection": "Search Selection",
     "shortcuts": {
       "copy": "Ctrl+C",
@@ -318,11 +319,9 @@
       "selectAll": "Ctrl+A"
     },
     "unarchive": "Unarchive",
-    "workflowRuns": "Workflow Runs",
-    "renameMachine": "Rename machine…",
-    "useReportedName": "Use the reported name",
     "unpairMachine": "Unpair this machine",
-    "renameMachineTitle": "Rename machine"
+    "useReportedName": "Use the reported name",
+    "workflowRuns": "Workflow Runs"
   },
   "conveyor": {
     "branches": {
@@ -1374,14 +1373,13 @@
         "description": "Pair once per Pi. The pairing link is single-use and expires.",
         "howTo": "On the other machine, run /remote-pi pair and paste the remotepi:// link it prints.",
         "label": "Paired Pi",
-        "pair": "Pair",
-        "success": "Paired. Any sessions the Pi has open appear below.",
-        "unpair": "Unpair",
-        "renamed": "Machine name saved.",
-        "nameLabel": "Machine name",
         "nameDescription": "Shown in the sidebar and tabs. Leave empty to use the name the paired machine reports.",
         "namePlaceholder": "e.g. MacBook",
-        "rename": "Rename"
+        "pair": "Pair",
+        "rename": "Rename",
+        "renamed": "Machine name saved.",
+        "success": "Paired. Any sessions the Pi has open appear below.",
+        "unpair": "Unpair"
       },
       "sessions": {
         "empty": "The paired Pi has no sessions open right now.",
@@ -1450,6 +1448,10 @@
     "showThinking": {
       "description": "Display model thinking blocks in responses",
       "label": "Show Thinking"
+    },
+    "singleDollarMath": {
+      "description": "Read text between single dollar signs, like $x$, as math. Money such as $5 and $10 can then show as math by mistake.",
+      "label": "Single $ Math"
     },
     "suggestNextSteps": {
       "description": "At the end of a turn, {{agent}} can suggest up to three next steps, such as missing tests or work it could not check. Click a step to put it in the message box. Applies to sessions that start after you save.",
@@ -1594,7 +1596,6 @@
     "sessionNamePlaceholder": "Session name",
     "sessionRow": {
       "remoteBadge": "Session on {{host}}",
-      "remoteFallback": "Remote",
       "tooltipActive": "{{title}}\n\nClick to open · double-click to rename · right-click for actions",
       "tooltipInactive": "{{title}}\n\nClick to open · right-click for actions"
     },
@@ -1623,6 +1624,25 @@
     "emptyOmp": "No skills found in ~/.omp/agent/skills, ~/.claude/skills, or project .omp/skills",
     "emptyPi": "No skills found in ~/.pi/agent/skills or project .pi/skills",
     "emptyTitle": "No skills found",
+    "groups": {
+      "actions": "Group actions",
+      "delete": "Delete group",
+      "deleteConfirmMessage": "Delete the group \"{{name}}\"? Its skills stay installed and go back to the main list.",
+      "deleteConfirmTitle": "Delete group?",
+      "emptyGroup": "No skills yet. Select a skill and pick this group.",
+      "groupLabel": "Group",
+      "moveDown": "Move down",
+      "moveUp": "Move up",
+      "namePlaceholder": "Group name",
+      "newGroup": "New group",
+      "newGroupOption": "New group…",
+      "noGroup": "No group",
+      "noMatches": "No skills match your search",
+      "noneAvailable": "None of these skills are installed for the current engine.",
+      "rename": "Rename group",
+      "searchPlaceholder": "Search skills",
+      "tip": "Sort your skills into groups."
+    },
     "providedByPlugin": "Provided by an installed plugin",
     "refreshAriaLabel": "Refresh skills",
     "runButton": "Run",
@@ -1635,7 +1655,7 @@
     },
     "modelLegend": {
       "empty": "No model usage in this range.",
-      "tokenBreakdown": "{{input}} in · {{output}} out"
+      "tokenBreakdown": "{{input}} in · {{output}} out · {{cache}} cache"
     },
     "overview": {
       "activeDaysLabel": "Active days",
@@ -1731,6 +1751,7 @@
     }
   },
   "statusBar": {
+    "cacheShare": "{{percent}}% cached",
     "compact": "compact",
     "compactContextTitle": "Compact context — summarize the conversation to free up space",
     "compacting": "compacting…",
@@ -1739,6 +1760,7 @@
     "followUpQueued_other": "{{count}} follow-up queued",
     "gitBranch": "Git branch: {{branch}}",
     "hideTerminal": "Hide terminal",
+    "messageCounts": "{{total}} messages: {{user}} from you, {{assistant}} from the agent, {{tools}} tool calls",
     "openWorkflowRuns": "Open workflow runs",
     "piError": "{{agent}} error",
     "piRunning": "{{agent}} running (PID: {{pid}})",
@@ -1748,13 +1770,11 @@
     "steerQueued_one": "{{count}} steer queued",
     "steerQueued_other": "{{count}} steer queued",
     "streaming": "streaming",
+    "tokenUsage": "Tokens: {{total}} total — {{input}} in, {{output}} out, {{cacheRead}} cache read, {{cacheWrite}} cache write",
     "waitingOnPromptElsewhere": "{{agent}} is waiting on a prompt in another workspace; switch to it to answer",
     "workflowCount_one": "{{count}} workflow",
     "workflowCount_other": "{{count}} workflows",
-    "workflowsFallback": "workflows",
-    "tokenUsage": "Tokens: {{total}} total — {{input}} in, {{output}} out, {{cacheRead}} cache read, {{cacheWrite}} cache write",
-    "messageCounts": "{{total}} messages: {{user}} from you, {{assistant}} from the agent, {{tools}} tool calls",
-    "cacheShare": "{{percent}}% cached"
+    "workflowsFallback": "workflows"
   },
   "store": {
     "confirm": {
