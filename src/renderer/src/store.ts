@@ -2283,10 +2283,15 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
       scheduleSessionListRefresh(get)
     } catch (err) {
       if (gen !== sessionLoadGeneration) return
+      const detail = err instanceof Error ? err.message : String(err)
+      // A chat that asked for its own worktree and landed in a folder that is
+      // not a repository must say so, not fail with a raw git message.
       get().addMessage({
         id: generateId(),
         role: 'system',
-        content: t('store.messages.newSessionError', { detail: err instanceof Error ? err.message : String(err) }),
+        content: /not a git repository/i.test(detail)
+          ? t('store.messages.notGitRepository')
+          : t('store.messages.newSessionError', { detail }),
         timestamp: Date.now(),
       })
     }

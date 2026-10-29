@@ -92,7 +92,9 @@ export function Sidebar(): React.JSX.Element {
   const [archivedOpen, setArchivedOpen] = useState(false)
   // A new chat normally shares the project folder. Ticking this gives it its own
   // git worktree instead, so two chats in one project cannot overwrite each
-  // other's files. Only offered in a repository: the worktree needs a HEAD.
+  // other's files. Offered for every project: a folder workspace carries no
+  // repository marker, so hiding it here would hide it everywhere, and the main
+  // side already answers a folder that is not a repository with a clear message.
   const [ownWorktree, setOwnWorktree] = useState(false)
 
   // Sessions on other machines, driven over the relay. They are not files on
@@ -328,7 +330,7 @@ export function Sidebar(): React.JSX.Element {
       return
     }
     setCurrentView('chat')
-    const inOwnWorktree = ownWorktree && Boolean(activeWorkspace.repoRoot)
+    const inOwnWorktree = ownWorktree
     try {
       await createNewSession({ ownWorktree: inOwnWorktree })
     } finally {
@@ -642,7 +644,7 @@ export function Sidebar(): React.JSX.Element {
               ? t('sidebar.newSessionButton.startsIn', { project: activeWorkspace.name })
               : t('sidebar.newSessionButton.openProjectToBegin')}
           </div>
-          {activeWorkspace?.repoRoot ? (
+          {activeWorkspace ? (
             <label className="mt-2 flex cursor-pointer items-center gap-2 px-1 text-[11px] text-muted hover:text-primary">
               <input
                 type="checkbox"
