@@ -511,11 +511,15 @@ export function ChatInput({ dropZoneRef }: ChatInputProps): React.JSX.Element {
   }, [addAttachment, t])
 
   // A stopped agent stays typable: the first send lazy-starts Pi/OMP.
-  // Only transient/error states block input.
+  // Only a hard error blocks input. A runtime that is still starting does not:
+  // the user can type immediately, and sendPrompt holds the text in this chat's
+  // queue until the agent is ready. Disabling the box made a new session feel
+  // frozen for the whole boot, which is the stall this replaced.
   // A remote session is served by the Pi on the other machine, so this process
   // being stopped or failing says nothing about whether prompts can be sent.
   const activeRemoteRef = useAppStore((state) => state.activeRemoteRef)
-  const isDisabled = !activeRemoteRef && (piStatus === 'starting' || piStatus === 'error')
+  const isDisabled = !activeRemoteRef && piStatus === 'error'
+  const isStarting = !activeRemoteRef && piStatus === 'starting'
 
   useLayoutEffect(() => {
     const textarea = textareaRef.current
@@ -767,11 +771,13 @@ export function ChatInput({ dropZoneRef }: ChatInputProps): React.JSX.Element {
           placeholder={
             activeRemoteRef
               ? t('chat.composer.placeholderRemote', { name: activeRemoteRef.hostname || 'remote' })
-              : isDisabled
-                ? t('chat.composer.placeholderNotRunning', { agent: engineLabel })
-                : isStreaming
-                  ? t('chat.composer.placeholderQueue')
-                  : t('chat.composer.placeholderIdle', { agent: engineLabel })
+              : isStarting
+                ? t('chat.composer.placeholderStarting', { agent: engineLabel })
+                : isDisabled
+                  ? t('chat.composer.placeholderNotRunning', { agent: engineLabel })
+                  : isStreaming
+                    ? t('chat.composer.placeholderQueue')
+                    : t('chat.composer.placeholderIdle', { agent: engineLabel })
           }
           disabled={isDisabled}
           rows={1}

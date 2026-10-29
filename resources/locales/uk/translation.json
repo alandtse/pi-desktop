@@ -52,7 +52,8 @@
       "placeholderIdle": "Задайте завдання для {{agent}} — / для команд",
       "placeholderNotRunning": "Агент {{agent}} не запущений…",
       "placeholderQueue": "Повідомлення в чергу — Ctrl+Enter надішле одразу",
-      "placeholderRemote": "Запитайте сеанс на {{name}} — / для команд"
+      "placeholderRemote": "Запитайте сеанс на {{name}} — / для команд",
+      "placeholderStarting": "Можна писати — {{agent}} запускається, повідомлення надійде, коли він буде готовий"
     },
     "council": {
       "planWithCouncil": "Планування з радою",

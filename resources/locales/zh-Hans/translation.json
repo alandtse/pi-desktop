@@ -52,7 +52,8 @@
       "placeholderIdle": "向 {{agent}} 提问 — 输入 / 使用命令",
       "placeholderNotRunning": "{{agent}} 智能体未在运行…",
       "placeholderQueue": "输入消息以加入队列 — Ctrl+Enter 立即发送",
-      "placeholderRemote": "向 {{name}} 上的会话提问 — 输入 / 使用命令"
+      "placeholderRemote": "向 {{name}} 上的会话提问 — 输入 / 使用命令",
+      "placeholderStarting": "现在就能输入 — {{agent}} 正在启动，就绪后会自动发送"
     },
     "council": {
       "planWithCouncil": "使用委员会规划",
