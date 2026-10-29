@@ -3248,3 +3248,57 @@ test('switching to a project tab paints its cached chat before the load lands', 
   releaseLoad()
   assert.ok(painted.length > 0, 'the tab showed its cached chat instead of a spinner')
 })
+
+test('a cache hit still restores the model the picker shows', async () => {
+  // The switch clears sessionState, and the model the selector displays lives
+  // there. Serving the transcript from cache skipped the fetch AND the state
+  // refresh along with it, so a tab came back with the right conversation and
+  // no model — the picker fell back to the default instead of the session's own.
+  const workspace = {
+    id: 'ws-cache-model',
+    name: 'Cache model',
+    path: '/tmp/workspace-cache-model',
+    createdAt: 0,
+    lastActiveAt: 0,
+    color: '#000',
+  }
+  const sessionPath = '/tmp/session-cache-model.jsonl'
+  const stateWithModel = (count: number): SessionState =>
+    ({
+      sessionFile: sessionPath,
+      messageCount: count,
+      model: { provider: 'ollama-cloud', id: 'deepseek-v4.1-flash:1017', name: 'Deepseek' },
+    } as unknown as SessionState)
+
+  activeWorkspaceResult = workspace
+  sessionStateResult = stateWithModel(1)
+  getMessagesResult = [{ role: 'user', content: [{ type: 'text', text: 'kept turn' }], timestamp: 1 }]
+  useAppStore.setState({
+    activeWorkspace: workspace,
+    workspaces: [workspace],
+    piStatus: 'running',
+    sessionState: stateWithModel(1),
+    activeSessionRuntimeId: 'runtime-model',
+    activeRemoteRef: null,
+    isStreaming: false,
+    messages: [],
+  })
+  await useAppStore.getState().reloadActiveSession({ refreshList: false })
+  calls.length = 0
+
+  // Return unchanged, the way a switch does: sessionState is cleared but the
+  // pending target still names the session, which is what keys the cache.
+  sessionStateResult = stateWithModel(1)
+  useAppStore.setState({ sessionState: null, switchingToSessionFile: sessionPath, messages: [] })
+  await useAppStore.getState().reloadActiveSession({ refreshList: false })
+  // The state refresh is deliberately fire-and-forget so it cannot reorder the
+  // history load; give it a turn before reading what the picker would show.
+  for (let tick = 0; tick < 50 && !useAppStore.getState().sessionState?.model; tick += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 1))
+  }
+
+  assert.equal(calls.filter((c) => c === 'getMessages').length, 0, 'still served from cache')
+  const state = useAppStore.getState()
+  assert.ok(state.sessionState?.model, 'the model the picker reads was restored')
+  assert.equal(state.sessionState?.model?.id, 'deepseek-v4.1-flash:1017', 'and it is the session\'s own model')
+})

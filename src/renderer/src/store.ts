@@ -2678,6 +2678,11 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
         activeChatKey: localQueueKey(currentSessionFile ?? null, runtimeId),
         switchingToSessionFile: null,
       })
+      // The switch cleared sessionState, and that is where the model lives: the
+      // picker reads sessionState.model, and assistant messages fall back to it
+      // when an event omits its own. Skipping the fetch must not skip the state,
+      // or the tab comes back showing no model at all.
+      void get().refreshSessionState()
       if (refreshList) scheduleSessionListRefresh(get)
       if (loadId === historyLoadId) historyLoadingRuntime = null
       return
