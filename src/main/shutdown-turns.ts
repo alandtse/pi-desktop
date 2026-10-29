@@ -1,34 +1,60 @@
 /**
- * Remembers which chats were mid-turn when the app last closed.
+ * Remembers which chats had a turn open when a run of the app stopped, so the
+ * next start can continue exactly those and nothing else.
  *
- * Why this exists: deciding "was this turn interrupted?" by inferring from the
- * session file cannot distinguish a turn the app's own quit cut short from one
- * that was simply the last thing written before the user quit on purpose. Both
- * end on an unanswered tool call, so the file alone is ambiguous, and a session
- * that quietly did not continue is indistinguishable from one that never needed
- * to.
+ * Why a claim rather than a flag: the earlier design kept one global record whose
+ * `recordedAt` was rewritten on every turn change, so the timestamp meant "last
+ * activity" and could never mean "when this run died". With no way to tell one
+ * run's record from another's, a claim could be offered on a start it did not
+ * belong to — the old session that restarts for no reason.
  *
- * Recording the answer at the moment of closing removes the inference: a chat is
- * continued on start only if it was genuinely working when the app went down.
- * The file check still runs, because the file is the authority on what can be
- * resumed — but it now answers "what can I resume?" instead of "did something go
- * wrong?", which is the question it can actually answer.
+ * Every claim now names the run that wrote it (`runId`, `pid`), and a claim is
+ * only offered to a DIFFERENT run. Consumption deletes exactly one entry, so five
+ * chats interrupted by one quit each get their own answer instead of the first
+ * one restored taking the whole record.
  */
 import { renameSync, writeFileSync } from 'node:fs'
 import { readFile, rename, writeFile } from 'node:fs/promises'
 
-/** Recorded chats, keyed by absolute session file path. */
-export interface ShutdownTurns {
-  /** ISO timestamp of the quit that produced this record. */
-  recordedAt: string
-  /** Session files that were mid-turn, with the time the turn began. */
-  midTurn: Record<string, string>
+/** One chat that had a turn open, and the run that saw it. */
+export interface TurnClaim {
+  /** Run that recorded the claim. A claim is never offered back to its own run. */
+  runId: string
+  /** Process that recorded it, for reading the file by hand. */
+  pid: number
+  /** ISO timestamp of the turn's start. */
+  startedAt: string
+  /** ISO timestamp of the last activity seen inside the turn. */
+  lastSeenAt: string
 }
 
-const MARKER_VERSION = 1
+/** What a stopped run leaves for the next one. */
+export interface ShutdownTurns {
+  /** Run that wrote this file most recently. */
+  runId: string
+  /** ISO timestamp of the last write. */
+  recordedAt: string
+  /**
+   * True only when the app shut itself down.
+   *
+   * Absent or false means the run ended some other way — a crash, a forced kill,
+   * a power loss. Not a gate on its own: a turn whose window died with the
+   * machine was genuinely cut short and must still be continued. It exists so
+   * the file can answer "why did this not continue?" without reading the log.
+   */
+  cleanExit: boolean
+  /** Chats with a turn open, keyed by absolute session file path. */
+  midTurn: Record<string, TurnClaim>
+}
 
-interface MarkerFile extends ShutdownTurns {
+const MARKER_VERSION = 2
+
+interface MarkerFile {
   version: number
+  runId: string
+  recordedAt: string
+  cleanExit: boolean
+  midTurn: Record<string, TurnClaim>
 }
 
 /** Path of the marker, beside the app's other GUI state. */
@@ -36,12 +62,23 @@ export function shutdownTurnsPath(guiDataDir: string): string {
   return `${guiDataDir}/shutdown-turns.json`
 }
 
+/** A fresh record for a run that has just started. */
+export function emptyRecord(runId: string, now = new Date().toISOString()): ShutdownTurns {
+  return { runId, recordedAt: now, cleanExit: false, midTurn: {} }
+}
+
+function isClaim(value: unknown): value is TurnClaim {
+  if (!value || typeof value !== 'object') return false
+  const claim = value as Partial<TurnClaim>
+  return typeof claim.runId === 'string' && claim.runId.length > 0
+}
+
 /**
  * Reads the marker a previous run left.
  *
- * Any problem — missing, unreadable, wrong shape — is reported as no record at
- * all, because continuing a turn nobody asked for is worse than not continuing
- * one that was wanted.
+ * Any problem — missing, unreadable, wrong shape, a version this build does not
+ * speak — is reported as no record at all, because continuing a turn nobody asked
+ * for is worse than not continuing one that was wanted.
  */
 export async function readShutdownTurns(guiDataDir: string): Promise<ShutdownTurns | null> {
   let text: string
@@ -58,15 +95,34 @@ export async function readShutdownTurns(guiDataDir: string): Promise<ShutdownTur
   }
   if (!parsed || typeof parsed !== 'object') return null
   const candidate = parsed as Partial<MarkerFile>
+  // Version 1 recorded bare timestamps and no run identity, so it cannot say
+  // which run wrote a claim. Refusing it costs one continuation after an
+  // upgrade; accepting it would restore the defect this version fixes.
   if (candidate.version !== MARKER_VERSION) return null
-  if (typeof candidate.recordedAt !== 'string') return null
+  if (typeof candidate.runId !== 'string' || typeof candidate.recordedAt !== 'string') return null
   const midTurn = candidate.midTurn
   if (!midTurn || typeof midTurn !== 'object') return null
-  const clean: Record<string, string> = {}
-  for (const [path, startedAt] of Object.entries(midTurn)) {
-    if (typeof startedAt === 'string') clean[path] = startedAt
+  const clean: Record<string, TurnClaim> = {}
+  for (const [path, claim] of Object.entries(midTurn)) {
+    if (isClaim(claim)) clean[path] = claim
   }
-  return { recordedAt: candidate.recordedAt, midTurn: clean }
+  return {
+    runId: candidate.runId,
+    recordedAt: candidate.recordedAt,
+    cleanExit: candidate.cleanExit === true,
+    midTurn: clean,
+  }
+}
+
+function payload(record: ShutdownTurns): string {
+  const body: MarkerFile = {
+    version: MARKER_VERSION,
+    runId: record.runId,
+    recordedAt: record.recordedAt,
+    cleanExit: record.cleanExit,
+    midTurn: record.midTurn,
+  }
+  return `${JSON.stringify(body, null, 2)}\n`
 }
 
 /**
@@ -79,49 +135,52 @@ export async function readShutdownTurns(guiDataDir: string): Promise<ShutdownTur
 export async function writeShutdownTurns(guiDataDir: string, record: ShutdownTurns): Promise<void> {
   const target = shutdownTurnsPath(guiDataDir)
   const temp = `${target}.tmp`
-  const payload: MarkerFile = { version: MARKER_VERSION, ...record }
-  await writeFile(temp, `${JSON.stringify(payload, null, 2)}\n`, 'utf-8')
+  await writeFile(temp, payload(record), 'utf-8')
   await rename(temp, target)
 }
 
 /**
- * Writes the marker synchronously, for the quit path.
+ * Writes the marker synchronously, for the quit path and for every live update.
  *
- * A quit cannot await: the same handler stops the Pi managers, which ends their
- * turns, so an async write would race the state it is recording. The rename is
- * what makes a partial write unreadable rather than misleading.
+ * Synchronous because the quit path cannot wait: the same handler stops the Pi
+ * managers, which ends their turns, so an async write would race the state it is
+ * recording. The rename is what makes a partial write unreadable rather than
+ * misleading.
  */
 export function writeShutdownTurnsSync(guiDataDir: string, record: ShutdownTurns): void {
   const target = shutdownTurnsPath(guiDataDir)
   const temp = `${target}.tmp`
-  const payload: MarkerFile = { version: MARKER_VERSION, ...record }
-  writeFileSync(temp, `${JSON.stringify(payload, null, 2)}
-`, 'utf-8')
+  writeFileSync(temp, payload(record), 'utf-8')
   renameSync(temp, target)
 }
 
-/** Clears the marker once its contents have been acted on. */
-export async function clearShutdownTurns(guiDataDir: string): Promise<void> {
-  try {
-    await writeFile(shutdownTurnsPath(guiDataDir), `${JSON.stringify({ version: MARKER_VERSION, recordedAt: '', midTurn: {} })}\n`, 'utf-8')
-  } catch {
-    // A marker that cannot be cleared only causes a redundant check next start;
-    // the file check still gates the send, so failing loudly here would cost more
-    // than it warns about.
-  }
-}
-
 /**
- * The chats to continue at startup.
+ * Whether a claim should be offered to the caller's run.
  *
- * A session continues only when the marker names it as mid-turn AND that path is
- * the session the caller is opening — so a quit with three chats working does not
- * send prompts into whichever one happens to be restored.
+ * The claim must have been recorded by a DIFFERENT run: one written by this run
+ * describes a turn that is still live, and continuing it would send a prompt into
+ * a conversation that is already working. A clean exit by the recording run still
+ * leaves the claim valid — the turn was open when the app closed, which is
+ * exactly what the feature recovers.
  */
 export function shouldContinueFromMarker(
   record: ShutdownTurns | null,
   sessionPath: string,
+  currentRunId: string,
 ): boolean {
   if (!record) return false
-  return Object.prototype.hasOwnProperty.call(record.midTurn, sessionPath)
+  if (record.runId === currentRunId) return false
+  const claim = record.midTurn[sessionPath]
+  if (!claim) return false
+  return claim.runId !== currentRunId
+}
+
+/** The claim for one chat, if it belongs to an earlier run. */
+export function claimFor(
+  record: ShutdownTurns | null,
+  sessionPath: string,
+  currentRunId: string,
+): TurnClaim | null {
+  if (!record || !shouldContinueFromMarker(record, sessionPath, currentRunId)) return null
+  return record.midTurn[sessionPath] ?? null
 }

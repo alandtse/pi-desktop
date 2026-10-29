@@ -82,6 +82,8 @@ let workspaceTerminals: WorkspaceTerminals | null = null
 let relayBridge: RelaySessionBridge | null = null
 /** Live mid-turn record, read by the quit path. */
 let turnTracker: TurnTracker | null = null
+/** This run's identity, so the quit record names the run that wrote it. */
+let runId: string | null = null
 
 // The single main window, tracked so the tray, single-instance relaunch, and
 // macOS dock-activate can all bring it back. `isQuitting` distinguishes a real
@@ -107,7 +109,10 @@ let recordedMidTurn = false
  */
 function recordMidTurnOnce(): void {
   recordedMidTurn = true
-  if (turnTracker) recordMidTurnSync(turnTracker)
+  // cleanExit marks this as a deliberate shutdown, so the file can answer "why
+  // was this not continued?" without reading the log. It is not a gate: a turn
+  // still open when the app closed was cut short however the app closed.
+  if (turnTracker && runId) recordMidTurnSync(turnTracker, runId, true)
 }
 
 // Guards the renderer's unsaved editor buffer against teardown. The renderer
@@ -528,6 +533,7 @@ app.whenReady().then(async () => {
   workspaceTerminals = ipc.terminals
   relayBridge = ipc.relay
   turnTracker = ipc.turnTracker
+  runId = ipc.runId
   // The relay only dials when a url and keypair are already stored, so this is
   // a no-op on a default install.
   void ipc.relay.start()

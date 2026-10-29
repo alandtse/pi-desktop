@@ -144,7 +144,8 @@ interface PiDesktopAPI {
     /** True when the previous run closed while this chat was mid-turn. */
     wasMidTurnAtShutdown(sessionPath: string): Promise<boolean>
     /** Drops the record once startup has acted on it. */
-    clearShutdownMarker(): Promise<void>
+    /** Consumes one chat's claim, leaving any other interrupted chats alone. */
+    clearShutdownMarker(sessionPath: string): Promise<void>
     getState(): Promise<unknown>
     getMessages(): Promise<unknown>
     getStats(): Promise<unknown>
@@ -533,7 +534,8 @@ const api: PiDesktopAPI = {
     resumeTarget: (cwd) => ipcRenderer.invoke(IPC_CHANNELS.SESSION_RESUME_TARGET, cwd),
     interruption: (sessionPath) => ipcRenderer.invoke(IPC_CHANNELS.SESSION_INTERRUPTION, sessionPath),
     wasMidTurnAtShutdown: (sessionPath) => ipcRenderer.invoke(IPC_CHANNELS.SESSION_WAS_MID_TURN_AT_SHUTDOWN, sessionPath),
-    clearShutdownMarker: () => ipcRenderer.invoke(IPC_CHANNELS.SESSION_CLEAR_SHUTDOWN_MARKER),
+    clearShutdownMarker: (sessionPath) =>
+      ipcRenderer.invoke(IPC_CHANNELS.SESSION_CLEAR_SHUTDOWN_MARKER, sessionPath),
     getState: () => ipcRenderer.invoke(IPC_CHANNELS.SESSION_GET_STATE),
     getMessages: () => ipcRenderer.invoke(IPC_CHANNELS.SESSION_GET_MESSAGES),
     getStats: () => ipcRenderer.invoke(IPC_CHANNELS.SESSION_GET_STATS),

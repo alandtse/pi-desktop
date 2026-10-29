@@ -1,58 +1,91 @@
 /**
- * The quit-time write and the startup read of the mid-turn record.
+ * The live write, the quit write, and the startup read of the mid-turn record.
  *
  * Kept as IPC rather than module state because the renderer is what decides to
- * continue a chat: main records the fact on the way out, and the renderer asks
- * on the way in whether the chat it restored was genuinely working.
+ * continue a chat: main records the facts, and the renderer asks on the way in
+ * whether the chat it restored was genuinely working when the last run stopped.
  */
-import { app, ipcMain } from 'electron'
+import { ipcMain } from 'electron'
 
 import { IPC_CHANNELS } from '../../shared/ipc-contracts'
+import { claimFor, readShutdownTurns, writeShutdownTurnsSync } from '../shutdown-turns'
 import type { ShutdownTurns } from '../shutdown-turns'
-import { clearShutdownTurns, readShutdownTurns, shouldContinueFromMarker, writeShutdownTurnsSync } from '../shutdown-turns'
 import type { TurnTracker } from '../turn-tracker'
 import { assertTrustedSender } from './validation'
 import { getGuiDataDir } from '../app-data-paths'
 import { appLog } from '../app-log'
 
 /**
- * Writes the record a quit leaves behind, synchronously.
+ * Writes the record as the live state changes, synchronously.
  *
- * Synchronous because the quit path cannot wait: the same handler stops the
+ * Synchronous because the quit path cannot wait: the same handler stops the Pi
  * managers, which ends their turns, so an async write would race the very state
  * it is recording. Failure is logged rather than thrown — a missing record only
  * means the next start continues nothing.
  */
-export function recordMidTurnSync(turnTracker: TurnTracker): void {
-  const record: ShutdownTurns = { recordedAt: new Date().toISOString(), midTurn: turnTracker.midTurn() }
-  const count = Object.keys(record.midTurn).length
+export function recordMidTurnSync(turnTracker: TurnTracker, runId: string, cleanExit = false): void {
+  const midTurn = turnTracker.midTurn()
+  const record: ShutdownTurns = {
+    runId,
+    recordedAt: new Date().toISOString(),
+    cleanExit,
+    midTurn,
+  }
+  const count = Object.keys(midTurn).length
   try {
     writeShutdownTurnsSync(getGuiDataDir(), record)
-    // Logged because the alternative failure is silent: a record that is never
-    // written and one that is written empty look identical on the next start.
-    appLog.info('continue', `Recorded ${count} chat(s) still working at quit`)
+    appLog.info(
+      'continue',
+      cleanExit ? `Clean exit with ${count} chat(s) still mid-turn` : `Recorded ${count} chat(s) still working`,
+    )
   } catch (error) {
     appLog.warn('continue', 'Could not record the mid-turn chats', error)
   }
 }
 
-export function registerShutdownTurnsHandler(workspaceManager: unknown, _turnTracker: TurnTracker): void {
-  // The renderer asks once per restored chat. Answered from the record a previous
-  // run wrote, so "was this interrupted?" stops being a guess about a file's last
-  // record and becomes a fact the closing app observed.
-  ipcMain.handle(IPC_CHANNELS.SESSION_WAS_MID_TURN_AT_SHUTDOWN, async (event, sessionPath: unknown) => {
-    assertTrustedSender(event)
-    if (typeof sessionPath !== 'string' || !sessionPath) return false
-    const record = await readShutdownTurns(getGuiDataDir())
-    return shouldContinueFromMarker(record, sessionPath)
-  })
+export interface ShutdownTurnsOptions {
+  /** This run's identity, so a claim this run wrote is never offered back to it. */
+  runId: string
+}
 
-  // Cleared after the renderer has had its answer, so a record cannot outlive the
-  // start it belongs to and offer a stale continuation on the start after that.
-  ipcMain.handle(IPC_CHANNELS.SESSION_CLEAR_SHUTDOWN_MARKER, async (event) => {
-    assertTrustedSender(event)
-    await clearShutdownTurns(getGuiDataDir())
-  })
-  void workspaceManager
-  void app
+export function registerShutdownTurnsHandler(
+  _workspaceManager: unknown,
+  _turnTracker: TurnTracker,
+  options: ShutdownTurnsOptions,
+): void {
+  // The renderer asks once per restored chat. Answered from the record the
+  // previous run wrote, so "was this interrupted?" stops being a guess about a
+  // file's last record and becomes a fact a run observed about itself.
+  ipcMain.handle(
+    IPC_CHANNELS.SESSION_WAS_MID_TURN_AT_SHUTDOWN,
+    async (event, sessionPath: unknown) => {
+      assertTrustedSender(event)
+      if (typeof sessionPath !== 'string' || !sessionPath) return false
+      const record = await readShutdownTurns(getGuiDataDir())
+      return claimFor(record, sessionPath, options.runId) !== null
+    },
+  )
+
+  // Consumes ONE chat's claim. It used to clear the whole file, which meant the
+  // first chat restored took the record and every other interrupted chat was
+  // told it had not been interrupted. Rewriting the record with one entry
+  // removed keeps the rest for their own asks, which come one after another
+  // because the renderer restores chats sequentially.
+  ipcMain.handle(
+    IPC_CHANNELS.SESSION_CLEAR_SHUTDOWN_MARKER,
+    async (event, sessionPath: unknown) => {
+      assertTrustedSender(event)
+      const record = await readShutdownTurns(getGuiDataDir())
+      if (!record) return
+      if (typeof sessionPath !== 'string' || !sessionPath) {
+        // No path means "drop the whole record" — kept for callers that are
+        // deliberately abandoning everything.
+        writeShutdownTurnsSync(getGuiDataDir(), { ...record, midTurn: {} })
+        return
+      }
+      if (!(sessionPath in record.midTurn)) return
+      const { [sessionPath]: _dropped, ...rest } = record.midTurn
+      writeShutdownTurnsSync(getGuiDataDir(), { ...record, midTurn: rest })
+    },
+  )
 }

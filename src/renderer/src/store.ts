@@ -1104,12 +1104,13 @@ async function continueInterruptedTurn(
     console.warn('[continuation] could not read the shutdown record', err)
     return
   }
-  // Cleared as soon as it is read: the record describes ONE quit, and leaving it
-  // in place would offer the same continuation again on every later start.
+  // Consumed per chat, never wholesale: the first restored chat used to take the
+  // whole record, so every other chat the quit interrupted was told it had not
+  // been interrupted and silently lost its continuation.
   try {
-    await window.piDesktop.session.clearShutdownMarker()
+    await window.piDesktop.session.clearShutdownMarker(sessionPath)
   } catch (err) {
-    console.warn('[continuation] could not clear the shutdown record', err)
+    console.warn('[continuation] could not clear the shutdown claim for this chat', err)
   }
   if (!wasMidTurn) {
     console.info('[continuation] not continued: the previous run did not close mid-turn')

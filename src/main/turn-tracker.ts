@@ -2,34 +2,38 @@
  * Tracks which chats are mid-turn, and keeps that on disk as it changes.
  *
  * Persisting continuously rather than only on quit is deliberate: a quit is the
- * one moment least likely to run. Restarting via a forced kill, a crash, or a
- * deploy script that terminates the process all skip the quit hooks entirely, and
- * those are exactly the cases a continuation is meant to recover from. Writing
- * when the state changes means the record on disk is accurate whether the app
- * exits cleanly or not.
+ * one moment least likely to run. Restarting via a forced kill, a crash, a
+ * power loss, or a deploy script that terminates the process all skip the quit
+ * hooks entirely, and those are exactly the cases a continuation is meant to
+ * recover from. Writing when the state changes means the record on disk is
+ * accurate whether the app exits cleanly or not.
+ *
+ * Each claim carries the run that wrote it, so a later run can tell "this was
+ * interrupted" from "this is still running".
  */
 import type { PiRpcEvent } from '../shared/ipc-contracts'
+import type { TurnClaim } from './shutdown-turns'
 
-/** One chat's live turn state. */
+/** What one chat's live turn looks like while it is running. */
 interface TurnState {
-  /** Session file the manager is running, captured when the turn started. */
-  sessionPath: string
-  /** ISO timestamp of the most recent activity in the turn. */
+  /** ISO timestamp of the turn's first event. */
   startedAt: string
+  /** ISO timestamp of the most recent activity seen in it. */
+  lastSeenAt: string
 }
 
 export interface TurnTracker {
   /** Feed one manager event. `sessionPath` resolves the manager's session, if any. */
   observe(event: PiRpcEvent, sessionPath: string | null): void
   /** Chats with a turn open right now, keyed by session file. */
-  midTurn(): Record<string, string>
+  midTurn(): Record<string, TurnClaim>
   /** Forget one manager's chats, e.g. when its process exits. */
   forget(sessionPath: string | null): void
 }
 
 export interface TurnTrackerOptions {
   /** Called whenever the record changes, with the chats currently working. */
-  onChange?: (midTurn: Record<string, string>) => void
+  onChange?: (midTurn: Record<string, TurnClaim>) => void
 }
 
 /**
@@ -53,18 +57,23 @@ export const STALE_TURN_MS = 10 * 60 * 1000
 export const RECORD_REFRESH_MS = 15 * 1000
 
 export function createTurnTracker(
+  runId: string,
   now: () => number = Date.now,
   options: TurnTrackerOptions = {},
+  pid: number = process.pid,
 ): TurnTracker {
   const active = new Map<string, TurnState>()
   let lastRefresh = 0
 
-  const snapshot = (): Record<string, string> => {
+  const snapshot = (): Record<string, TurnClaim> => {
     const cutoff = now() - STALE_TURN_MS
-    const record: Record<string, string> = {}
+    const record: Record<string, TurnClaim> = {}
     for (const [path, state] of active) {
-      if (Date.parse(state.startedAt) < cutoff) continue
-      record[path] = state.startedAt
+      // Ageing out on the LAST activity, not the turn's start: a long agent run
+      // emits events throughout, and measuring from the start would drop a
+      // fifteen-minute turn while it was still working.
+      if (Date.parse(state.lastSeenAt) < cutoff) continue
+      record[path] = { runId, pid, startedAt: state.startedAt, lastSeenAt: state.lastSeenAt }
     }
     return record
   }
@@ -79,7 +88,8 @@ export function createTurnTracker(
       if (!sessionPath) return
 
       if (event.type === 'agent_start') {
-        active.set(sessionPath, { sessionPath, startedAt: new Date(now()).toISOString() })
+        const at = new Date(now()).toISOString()
+        active.set(sessionPath, { startedAt: at, lastSeenAt: at })
         // A turn beginning is the fact this record exists to carry: written at
         // once so a kill one second later still leaves an accurate record.
         announce()
@@ -96,8 +106,9 @@ export function createTurnTracker(
 
       // Activity inside a live turn keeps it from ageing out, but is written at
       // most once per interval.
-      if (!active.has(sessionPath)) return
-      active.set(sessionPath, { sessionPath, startedAt: new Date(now()).toISOString() })
+      const state = active.get(sessionPath)
+      if (!state) return
+      state.lastSeenAt = new Date(now()).toISOString()
       if (now() - lastRefresh >= RECORD_REFRESH_MS) announce()
     },
 

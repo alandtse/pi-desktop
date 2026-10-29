@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import { ipcMain, type IpcMainInvokeEvent } from 'electron'
 import { createExtensionUiRouter, wireExtensionUiIpc } from './extension-ui-ipc'
 import { WorkspaceManager } from './workspace-manager'
@@ -54,16 +55,33 @@ export function registerIpcHandlers(
   workspaceManager: WorkspaceManager,
   windowControls: WindowControls = { getWindow: () => null, showWindow: () => {} },
   iconPath = '',
-): { terminals: WorkspaceTerminals; relay: RelaySessionBridge; turnTracker: TurnTracker } {
+): {
+  terminals: WorkspaceTerminals
+  relay: RelaySessionBridge
+  turnTracker: TurnTracker
+  /** This run's identity, so quit-time records can name it. */
+  runId: string
+} {
   const ctx = createIpcContext(workspaceManager)
+  // One identity per app start. Continuation claims name the run that wrote
+  // them, so a claim this run is holding is never offered back to it as an
+  // interruption — that confusion is what made old chats restart.
+  const runId = randomUUID()
   // Fed by the router and read by the quit path; see turn-tracker.ts for why a
   // live record beats inferring an interruption from the session file.
   // Written as the state changes, not only on quit: a forced kill or a crash skips
   // the quit hooks, and those are the cases a continuation recovers from.
-  const turnTracker = createTurnTracker(Date.now, {
+  const turnTracker = createTurnTracker(runId, Date.now, {
     onChange: (midTurn) => {
       try {
-        writeShutdownTurnsSync(getGuiDataDir(), { recordedAt: new Date().toISOString(), midTurn })
+        // runId and pid travel with every claim: a later run needs to know the
+        // claim is not its own before offering to continue it.
+        writeShutdownTurnsSync(getGuiDataDir(), {
+          runId,
+          recordedAt: new Date().toISOString(),
+          cleanExit: false,
+          midTurn,
+        })
       } catch (error) {
         appLog.warn('continue', 'Could not record the mid-turn chats', error)
       }
@@ -140,7 +158,7 @@ export function registerIpcHandlers(
     ctx.broadcast(IPC_CHANNELS.EVENT_FILE_CHANGE, event)
   })
 
-  registerShutdownTurnsHandler(workspaceManager, turnTracker)
+  registerShutdownTurnsHandler(workspaceManager, turnTracker, { runId })
 
-  return { terminals: ctx.terminalService, relay, turnTracker }
+  return { terminals: ctx.terminalService, relay, turnTracker, runId }
 }
