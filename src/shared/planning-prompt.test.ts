@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { sessionPreview, stripInjectedPreamble } from '../../../shared/session-preview'
+import { sessionPreview, stripInjectedPreamble } from './session-preview'
 import { buildPlanningPrompt } from './planning-prompt'
 
 const prompt = buildPlanningPrompt('Delete unused files')
