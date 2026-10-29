@@ -769,8 +769,14 @@ export function ChatInput({ dropZoneRef }: ChatInputProps): React.JSX.Element {
         <textarea
           ref={textareaRef}
           placeholder={
+            // A chat that is still opening takes a draft happily -- the text is
+            // kept for that chat and sent as soon as it lands -- so the box must
+            // not look closed. Saying so is cheaper than a disabled field the
+            // user has to fight.
             activeRemoteRef
               ? t('chat.composer.placeholderRemote', { name: activeRemoteRef.hostname || 'remote' })
+              : sessionLoading
+                ? t('chat.composer.placeholderLoading')
               : isStarting
                 ? t('chat.composer.placeholderStarting', { agent: engineLabel })
                 : isDisabled

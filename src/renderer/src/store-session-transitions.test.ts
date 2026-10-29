@@ -52,7 +52,7 @@ let sessionStateResult: SessionState | null = null
 // prompt at all.
 let resumeTargetResult: string | null = null
 // Runs inside the stubbed session.switch, i.e. while the resume is still in flight.
-let switchHook: (() => void) | null = null
+let switchHook: (() => void | Promise<void>) | null = null
 // Gates the stubbed getMessages so a test can observe what is on screen while a
 // refresh is still in flight.
 let getMessagesGate: (() => Promise<void>) | null = null
@@ -257,7 +257,7 @@ const piDesktopStub = {
   session: {
     switch: async (path: string) => {
       calls.push(`switch:${path}`)
-      switchHook?.()
+      await switchHook?.()
       return switchResult
     },
     createNew: async () => {
@@ -407,6 +407,10 @@ beforeEach(() => {
     workspaceActivity: {},
     reattachedMidTurn: false,
     sessionLoading: false,
+    // A switch's target outlives the test that started it unless it is reset,
+    // and a leaked one makes the NEXT test's landing adopt a stale chat key.
+    switchingToSessionFile: null,
+    activeChatKey: '',
     sessionRuntimes: {},
     activeSessionRuntimeId: null,
     activeWorkspace: null,
@@ -3029,4 +3033,34 @@ test('a prompt sent while the agent is still starting is held, not dropped', asy
     state.messages.some((message) => message.role === 'system' && message.content.includes('waiting')),
     'the user is told why nothing was sent'
   )
+})
+
+test('text typed while a chat is opening belongs to that chat, not the one being left', async () => {
+  // The reported bug: the box accepted nothing while a session loaded. It was
+  // never disabled -- the composer stayed keyed to the chat being LEFT until the
+  // history landed, so what was typed went into that chat's draft and the
+  // landing re-keyed the box onto the destination's (empty) draft.
+  const target = '/sessions/opening.jsonl'
+  const queueKey = localQueueKey(target, null)
+
+  // Observations are COLLECTED here and asserted after the switch returns. An
+  // assert thrown inside this hook is swallowed by switchSession's own try/catch
+  // -- the first version of this test failed exactly that way and reported
+  // `pass 1` with the bug present.
+  const seen: { keyAtSwitch: string; callsAtSwitch: string[]; msgsAtSwitch: number } = {
+    keyAtSwitch: '',
+    callsAtSwitch: [],
+    msgsAtSwitch: 0,
+  }
+  switchHook = async () => {
+    seen.keyAtSwitch = useAppStore.getState().activeChatKey
+    seen.callsAtSwitch = [...calls]
+  }
+
+  await useAppStore.getState().switchSession(target, '/project')
+
+  assert.equal(seen.keyAtSwitch, queueKey, 'the composer is already keyed to the chat being opened')
+
+  const after = useAppStore.getState()
+  assert.equal(after.activeChatKey, queueKey, 'the destination key does not change when the history lands')
 })

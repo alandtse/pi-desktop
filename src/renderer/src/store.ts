@@ -2528,6 +2528,12 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
           // field that carries it. Remember the target here so the transcript can
           // be painted from cache before the round-trip answers.
           switchingToSessionFile: path,
+          // The chat on screen is now the destination, so the composer must key
+          // its draft and its queue to THAT chat from the first frame. Waiting
+          // for the history to land left the box owned by the chat being left,
+          // and the text typed during the wait was written to its draft and then
+          // replaced when the landing re-keyed the box -- typing looked ignored.
+          activeChatKey: localQueueKey(path, null),
           // Moving to a local session ends the relay binding. Without this the
           // composer would keep routing prompts to the other machine while the
           // transcript on screen belongs to a session on this one.
@@ -2683,7 +2689,12 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
             reattached ? markUnansweredToolCallsRunning(messages) : messages,
             runtimeId ? get().sessionRuntimes[runtimeId] : undefined
           )
-          const sessionFile = get().sessionState?.sessionFile
+          // Prefer the target recorded when the switch began: `sessionState`
+          // was nulled at that point and only comes back once the engine
+          // answers, so deriving the chat's identity from it here would collapse
+          // the composer key (and every draft and queue behind it) to
+          // `local-rt:unknown` whenever that answer had not landed yet.
+          const sessionFile = get().switchingToSessionFile ?? get().sessionState?.sessionFile
           if (sessionFile) cacheTranscript(sessionFile, { messages: finalMessages, total })
           // Recall belongs to the chat, so it comes from the chat's own turns.
           set({

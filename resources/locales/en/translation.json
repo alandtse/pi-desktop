@@ -53,7 +53,8 @@
       "placeholderNotRunning": "{{agent}} agent is not running...",
       "placeholderQueue": "Type to queue a message — Ctrl+Enter sends it now",
       "placeholderRemote": "Ask the session on {{name}} anything — / for commands",
-      "placeholderStarting": "Type now — {{agent}} is starting, and your message is sent when it is ready"
+      "placeholderStarting": "Type now — {{agent}} is starting, and your message is sent when it is ready",
+      "placeholderLoading": "Type now — this chat is still loading, and your message is sent once it opens"
     },
     "council": {
       "planWithCouncil": "Plan with Council",
