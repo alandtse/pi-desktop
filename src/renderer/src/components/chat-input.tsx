@@ -533,7 +533,10 @@ export function ChatInput({ dropZoneRef }: ChatInputProps): React.JSX.Element {
   }, [])
 
   useEffect(() => {
-    if (!composerFocusRequested || isDisabled || sessionLoading || currentView !== 'chat') return
+    // The loading placeholder must not swallow the focus request: the composer
+    // is typeable during a history load (see the placeholder), so holding the
+    // request back until it finished left the box unfocused for the whole load.
+    if (!composerFocusRequested || isDisabled || currentView !== 'chat') return
     // History hydration swaps the loading composer for the empty-chat composer.
     // Keep the request pending until the mounted, enabled input actually takes focus.
     const frame = requestAnimationFrame(() => {
@@ -545,7 +548,7 @@ export function ChatInput({ dropZoneRef }: ChatInputProps): React.JSX.Element {
       }
     })
     return () => cancelAnimationFrame(frame)
-  }, [composerFocusRequested, isDisabled, sessionLoading, currentView])
+  }, [composerFocusRequested, isDisabled, currentView])
 
   useEffect(() => {
     if (!composerFocusRequested) return
