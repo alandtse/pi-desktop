@@ -2818,7 +2818,12 @@ test('cycling back to a session paints it without waiting for the round-trip', a
   assert.ok(painted.length > 0, 'the cached transcript is shown before the refresh answers')
 })
 
-test('a session file reported with different casing still hits its cache', async () => {
+test('a session file reported with different casing still hits its cache', {
+  // pathGroupKey only case-folds when isPathCaseInsensitive() is true, which reads
+  // `platform === 'win32'`. The fold is therefore Windows-only by design, so on
+  // macOS/Linux this asserts behaviour the platform deliberately does not have.
+  skip: process.platform === 'win32' ? false : 'win32-only case folding',
+}, async () => {
   // Windows reports the same file with whatever casing it likes; a raw-string key
   // would miss and silently refetch, which is how the slowness would come back.
   const workspace = {
