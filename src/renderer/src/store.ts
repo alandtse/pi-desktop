@@ -3547,7 +3547,18 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
               },
             }
           })
-        } else if (uiEvent.method === 'setTitle' || uiEvent.method === 'set_editor_text') {
+        } else if (uiEvent.method === 'set_editor_text') {
+          // A command that wants to hand the user text to read or edit writes it
+          // into the composer. Dropping it made such a command look like it did
+          // nothing, which is how an extension's report went missing entirely.
+          const text = uiEvent.text
+          if (typeof text === 'string' && text.length > 0) {
+            set((state) => ({
+              currentView: state.currentView === 'home' ? 'home' : 'chat',
+              pendingInsert: { text, nonce: Date.now(), replace: true },
+            }))
+          }
+        } else if (uiEvent.method === 'setTitle') {
           // Fire-and-forget: nothing to store in state.
         } else if (uiEvent.method === 'notify') {
           // Toast slot: kept apart from the dialog slot so a notification can

@@ -654,6 +654,8 @@ export interface PiExtensionUiRequest {
   ask?: RelayAskEnrichment
   statusKey?: string
   statusText?: string
+  /** `set_editor_text` payload: text the command wants in the composer. */
+  text?: string
   widgetKey?: string
   widgetLines?: string[]
   widgetPlacement?: string
