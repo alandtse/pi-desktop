@@ -66,6 +66,19 @@ export function registerShutdownTurnsHandler(
     },
   )
 
+  // Every chat a previous run left working, so a start can reopen them all.
+  // Continuation used to be offered only to the chat the app restored, so a quit
+  // with three chats working continued at most one and nothing ever asked about
+  // the others.
+  ipcMain.handle(IPC_CHANNELS.SESSION_INTERRUPTED_CHATS, async (event) => {
+    assertTrustedSender(event)
+    const record = await readShutdownTurns(getGuiDataDir())
+    if (!record) return []
+    return Object.keys(record.midTurn).filter((sessionPath) =>
+      claimFor(record, sessionPath, options.runId) !== null,
+    )
+  })
+
   // Consumes ONE chat's claim. It used to clear the whole file, which meant the
   // first chat restored took the record and every other interrupted chat was
   // told it had not been interrupted. Rewriting the record with one entry

@@ -1012,6 +1012,61 @@ async function flushResumedTurnCandidates(get: () => AppState & AppActions): Pro
 }
 
 /**
+ * Reopens the chats a previous run left working that the restore did not.
+ *
+ * Continuation was offered only to the chat the app restored, so a quit with
+ * three chats mid-turn continued at most one and nothing ever asked about the
+ * rest — the "it does not fire on reboot" report. These are opened as tabs so
+ * each one's claim is asked about by the same path a restored chat uses; focus
+ * stays on the first chat, because reopening should not rewrite what the user
+ * was looking at.
+ */
+export async function openOtherInterruptedChats(get: () => AppState & AppActions): Promise<void> {
+  let interrupted: string[]
+  try {
+    interrupted = await window.piDesktop.session.interruptedChats()
+  } catch (err) {
+    console.warn('[continuation] could not list the interrupted chats', err)
+    return
+  }
+  if (interrupted.length === 0) return
+
+  const focus = get()
+  const focusWorkspaceId = focus.activeWorkspace?.id
+  const focusSession = focus.sessionState?.sessionFile ?? null
+
+  for (const sessionPath of interrupted) {
+    // The restored chat has already been offered its claim.
+    if (focusSession && pathsEqual(sessionPath, focusSession)) continue
+    const row = get().sessionList.find((item) => !item.remote && pathsEqual(item.path, sessionPath))
+    if (!row) {
+      // A chat whose workspace no longer exists cannot be reopened. Its claim is
+      // left alone rather than spent, so a later start with the project
+      // reattached can still continue it.
+      console.info('[continuation] no workspace row for an interrupted chat', sessionPath)
+      continue
+    }
+    try {
+      await get().openSessionItem(row)
+    } catch (err) {
+      console.warn('[continuation] could not reopen an interrupted chat', sessionPath, err)
+    }
+  }
+
+  // Put the user back where they were. Reopening is recovery, not navigation,
+  // so the chat on screen must be the one that was on screen before. Done by
+  // walking back through the same actions the reopen used, because a fresh
+  // switchSession would reload a transcript that is already cached.
+  if (!focusWorkspaceId || get().activeWorkspace?.id === focusWorkspaceId) return
+  await get().activateWorkspace(focusWorkspaceId, { awaitingSession: true, skipDirtyConfirm: true })
+  if (focusSession) {
+    const projectPath = get().activeWorkspace?.path
+    await get().switchSession(focusSession, projectPath)
+    get().setCurrentView('chat')
+  }
+}
+
+/**
  * How long to wait for the resumed session to report a model before giving up.
  *
  * A restored session reports no model until the engine has loaded it, and a
@@ -1838,6 +1893,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
     // After the guard is released, not before: the continuation sends a prompt,
     // and a prompt that starts the agent waits on `pendingLastSessionOpen`.
     if (opened) await flushResumedTurnCandidates(get)
+    if (opened) await openOtherInterruptedChats(get)
     return opened
   },
 

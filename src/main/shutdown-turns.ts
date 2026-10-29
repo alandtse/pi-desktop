@@ -48,6 +48,10 @@ export interface ShutdownTurns {
 }
 
 const MARKER_VERSION = 2
+/** Version that stored bare timestamps, still read so an upgrade restart continues. */
+const LEGACY_VERSION = 1
+/** Name given to v1 claims. No live run can match it, so they read as a dead run's. */
+export const LEGACY_RUN_ID = 'legacy'
 
 interface MarkerFile {
   version: number
@@ -94,16 +98,40 @@ export async function readShutdownTurns(guiDataDir: string): Promise<ShutdownTur
     return null
   }
   if (!parsed || typeof parsed !== 'object') return null
-  const candidate = parsed as Partial<MarkerFile>
-  // Version 1 recorded bare timestamps and no run identity, so it cannot say
-  // which run wrote a claim. Refusing it costs one continuation after an
-  // upgrade; accepting it would restore the defect this version fixes.
-  if (candidate.version !== MARKER_VERSION) return null
-  if (typeof candidate.runId !== 'string' || typeof candidate.recordedAt !== 'string') return null
+  const candidate = parsed as Partial<MarkerFile> & { version?: number }
   const midTurn = candidate.midTurn
   if (!midTurn || typeof midTurn !== 'object') return null
+
+  // Version 1 stored bare ISO timestamps and no run identity. It is still
+  // readable, and refusing it defeated the commonest interruption there is: an
+  // in-place update, where the deploy kills the app mid-turn and the very next
+  // start is the one that should continue. Any record found at startup was
+  // written by a previous process — the single-instance lock guarantees only one
+  // app runs — so a v1 claim is unambiguously from a dead run and is adopted
+  // under a name no live run can hold.
+  if (candidate.version === LEGACY_VERSION) {
+    const adopted: Record<string, TurnClaim> = {}
+    for (const [path, startedAt] of Object.entries(midTurn as Record<string, unknown>)) {
+      if (typeof startedAt !== 'string') continue
+      adopted[path] = {
+        runId: LEGACY_RUN_ID,
+        pid: 0,
+        startedAt,
+        lastSeenAt: startedAt,
+      }
+    }
+    return {
+      runId: LEGACY_RUN_ID,
+      recordedAt: typeof candidate.recordedAt === 'string' ? candidate.recordedAt : '',
+      cleanExit: candidate.cleanExit === true,
+      midTurn: adopted,
+    }
+  }
+
+  if (candidate.version !== MARKER_VERSION) return null
+  if (typeof candidate.runId !== 'string' || typeof candidate.recordedAt !== 'string') return null
   const clean: Record<string, TurnClaim> = {}
-  for (const [path, claim] of Object.entries(midTurn)) {
+  for (const [path, claim] of Object.entries(midTurn as Record<string, unknown>)) {
     if (isClaim(claim)) clean[path] = claim
   }
   return {

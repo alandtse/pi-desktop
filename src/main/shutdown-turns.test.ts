@@ -11,6 +11,7 @@ import { join } from 'node:path'
 import { test } from 'node:test'
 
 import {
+  LEGACY_RUN_ID,
   claimFor,
   readShutdownTurns,
   shouldContinueFromMarker,
@@ -96,13 +97,10 @@ test('a corrupt or foreign record continues nothing', async () => {
   )
   assert.equal(await readShutdownTurns(dir), null)
 
-  // Version 1 wrote bare timestamps and no run identity, so it cannot say which
-  // run a claim belongs to. Accepting it would restore the defect this version
-  // exists to fix, so it is refused and one continuation is lost after an
-  // upgrade instead.
+  // A version nobody knows may mean something else entirely.
   await writeFile(
     shutdownTurnsPath(dir),
-    JSON.stringify({ version: 1, recordedAt: 'now', midTurn: { '/s/a.jsonl': '2026-10-29T00:00:00.000Z' } }),
+    JSON.stringify({ version: 424242, runId: RUN_A, recordedAt: 'now', midTurn: { '/s/a.jsonl': claim(RUN_A) } }),
     'utf-8',
   )
   assert.equal(await readShutdownTurns(dir), null)
@@ -157,5 +155,31 @@ test('consuming one chat leaves the others for their own ask', async () => {
 
   const final = await readShutdownTurns(dir)
   assert.deepEqual(final?.midTurn, {}, 'every claim is spent once all three chats asked')
+  await rm(dir, { recursive: true, force: true })
+})
+
+
+test('a version 1 record is adopted, so an in-place update still continues', async () => {
+  // The failure this pins: an update kills the app mid-turn, and the next start
+  // is exactly the one that must continue. Refusing the old format made the
+  // feature fail on the commonest interruption there is.
+  const dir = await tempDir()
+  await writeFile(
+    shutdownTurnsPath(dir),
+    JSON.stringify({
+      version: 1,
+      recordedAt: '2026-10-29T00:00:00.000Z',
+      midTurn: { '/s/a.jsonl': '2026-10-29T00:00:00.000Z', '/s/b.jsonl': '2026-10-29T00:01:00.000Z' },
+    }),
+    'utf-8',
+  )
+
+  const record = await readShutdownTurns(dir)
+  assert.ok(record, 'a v1 record must be readable')
+  assert.equal(record.runId, LEGACY_RUN_ID)
+  assert.equal(shouldContinueFromMarker(record, '/s/a.jsonl', RUN_B), true)
+  assert.equal(shouldContinueFromMarker(record, '/s/b.jsonl', RUN_B), true)
+  // No live run can hold the legacy name, so it can never match itself.
+  assert.equal(shouldContinueFromMarker(record, '/s/a.jsonl', LEGACY_RUN_ID), false)
   await rm(dir, { recursive: true, force: true })
 })

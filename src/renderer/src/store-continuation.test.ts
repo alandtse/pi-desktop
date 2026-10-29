@@ -15,7 +15,7 @@ import { test } from 'node:test'
 
 import { DEFAULT_SETTINGS } from '../../shared/default-settings'
 import { continuationPrompt } from '../../shared/interrupted-turn'
-import { isSameSessionShown, useAppStore } from './store'
+import { isSameSessionShown, openOtherInterruptedChats, useAppStore } from './store'
 
 type StoreState = ReturnType<typeof useAppStore.getState>
 type SessionState = StoreState['sessionState']
@@ -75,4 +75,53 @@ test('an interrupted turn asks for a continuation and a finished one does not', 
   // A turn the user stopped classifies as null, and offers nothing.
   assert.equal(continuationPrompt({ ...base, reason: null }), null)
   assert.equal(continuationPrompt({ ...base, reason: 'tool-call-unanswered', enabled: false }), null)
+})
+
+test('a quit that interrupts several chats reopens each of them, not just the restored one', async () => {
+  // The reported failure: continuation fired only for the chat the app restored,
+  // so a quit with three chats working continued at most one and the rest were
+  // never asked about. This pins that every interrupted chat is opened, which is
+  // what gives each one a chance to claim its continuation.
+  const restored = '/sessions/restored.jsonl'
+  const interrupted = [restored, '/sessions/second.jsonl', '/sessions/third.jsonl']
+  const opened: string[] = []
+
+  const listItem = (path: string) => ({
+    path,
+    name: path,
+    preview: null,
+    sessionId: path,
+    projectPath: '/project',
+    projectName: 'Project',
+  }) as unknown as StoreState['sessionList'][number]
+
+  const previous = useAppStore.getState()
+  useAppStore.setState({
+    ...stateWith({}),
+    sessionList: interrupted.map(listItem),
+    sessionState: { sessionFile: restored } as unknown as SessionState,
+    // Every open is observed; the store action is what would switch the view.
+    openSessionItem: (async (row: { path: string }) => {
+      opened.push(row.path)
+    }) as unknown as StoreState['openSessionItem'],
+  })
+  const host = globalThis as unknown as { window?: Record<string, unknown> }
+  host.window = {
+    ...(host.window ?? {}),
+    piDesktop: {
+      session: { interruptedChats: async () => interrupted },
+    },
+  }
+
+  try {
+    await openOtherInterruptedChats(useAppStore.getState)
+  } finally {
+    useAppStore.setState(previous)
+  }
+
+  assert.deepEqual(
+    opened.sort(),
+    ['/sessions/second.jsonl', '/sessions/third.jsonl'],
+    'the restored chat keeps its own path and the other two are opened',
+  )
 })

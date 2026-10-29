@@ -43,6 +43,8 @@ export const IPC_CHANNELS = {
   SESSION_WAS_MID_TURN_AT_SHUTDOWN: 'session:was-mid-turn-at-shutdown',
   /** Drops the record once startup has acted on it. */
   SESSION_CLEAR_SHUTDOWN_MARKER: 'session:clear-shutdown-marker',
+  /** Every chat a previous run left mid-turn: the ones a start must reopen. */
+  SESSION_INTERRUPTED_CHATS: 'session:interrupted-chats',
   SESSION_GET_STATE: 'session:get-state',
   SESSION_GET_MESSAGES: 'session:get-messages',
   SESSION_GET_STATS: 'session:get-stats',
