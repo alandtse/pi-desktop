@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { adjacentTabIndex, moveProjectTab, projectTabs } from './tab-navigation'
-import { machineDisplayName, remoteProjectTabs, sessionTabs } from './session-tabs'
+import { isTabActive, machineDisplayName, remoteProjectTabs, sessionTabs } from './session-tabs'
+import type { RemoteSessionRef } from '../../../shared/ipc-contracts'
+import type { SessionTab } from './session-tabs'
 import { commandDisplayName, filterCommands } from '../../../shared/pi-command'
 import type { PiCommand } from '../../../shared/pi-command'
 import type { SessionListItem, SessionRuntimeInfo, Workspace } from '../../../shared/ipc-contracts'
@@ -252,4 +254,32 @@ test('a slash token finds the engine commands including skills and extensions', 
   // A skill shows without the redundant "skill:" prefix, which is what the
   // command list renders.
   assert.equal(commandDisplayName(catalog[2]), 'caveman')
+})
+
+test('a local chat is not active while a remote chat owns the view', () => {
+  // The reported symptom: picking a remote session left the project tab and its
+  // first session highlighted while the remote one was what got shown.
+  const local: SessionTab = {
+    id: 'local-1',
+    kind: 'local',
+    title: 'first',
+    runtime: { runtimeId: 'rt-1' } as SessionTab['runtime'],
+    ref: null,
+  }
+  const remoteRow: SessionTab = {
+    id: 'remote:peerA:room-1',
+    kind: 'remote',
+    title: 'remote chat',
+    runtime: null,
+    ref: { peer: 'peerA', roomId: 'room-1' } as RemoteSessionRef,
+  }
+
+  // The runtime id is still populated from the local chat that was on screen
+  // before the switch. That is exactly the trap.
+  assert.equal(isTabActive(local, 'rt-1', { peer: 'peerA', roomId: 'room-1' } as RemoteSessionRef), false)
+  assert.equal(isTabActive(remoteRow, 'rt-1', { peer: 'peerA', roomId: 'room-1' } as RemoteSessionRef), true)
+
+  // With no remote open, the local chat is active again.
+  assert.equal(isTabActive(local, 'rt-1', null), true)
+  assert.equal(isTabActive(remoteRow, 'rt-1', null), false)
 })

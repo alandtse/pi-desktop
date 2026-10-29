@@ -136,7 +136,10 @@ export function WorkspaceTabs(): React.JSX.Element {
         </button>
       )}
       {tabs.map((workspace) => {
-        const active = workspace.id === activeWorkspace?.id && !toolsActive
+        // A remote chat is what is on screen, so no local project is active —
+        // without this the project the remote session was opened FROM stayed
+        // highlighted while the remote tab was the one being shown.
+        const active = workspace.id === activeWorkspace?.id && !toolsActive && !activeRemoteRef
         const activity = workspaceActivity[workspace.id]
         const isWorktree = workspace.kind === 'worktree'
         const isLinkedTask = workspace.kind === 'repoSet'

@@ -177,12 +177,13 @@ export function isTabActive(
   activeRuntimeId: string | null,
   activeRemote: RemoteSessionRef | null,
 ): boolean {
-  if (tab.kind === 'local') return tab.runtime !== null && tab.runtime.runtimeId === activeRuntimeId
-  return (
-    activeRemote !== null &&
-    activeRemote.peer === tab.ref?.peer &&
-    activeRemote.roomId === tab.ref?.roomId
-  )
+  // A remote chat owns the view while it is open, so no local runtime can be
+  // the active one. Checking the local side first let a stale runtime id mark a
+  // local chat active beside the remote it had been replaced by.
+  if (activeRemote !== null) {
+    return tab.kind === 'remote' && activeRemote.peer === tab.ref?.peer && activeRemote.roomId === tab.ref?.roomId
+  }
+  return tab.kind === 'local' && tab.runtime !== null && tab.runtime.runtimeId === activeRuntimeId
 }
 
 /**
