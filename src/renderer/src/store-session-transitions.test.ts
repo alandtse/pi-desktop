@@ -12,6 +12,8 @@ import type {
   RemoteSessionRef,
 } from '../../shared/ipc-contracts'
 import { continuationPrompt } from '../../shared/interrupted-turn'
+import { DEFAULT_SETTINGS } from '../../shared/default-settings'
+import { localQueueKey } from './send-queue'
 import { isSameSessionShown } from './store'
 import type { PreviewTarget } from './store'
 // The store is imported dynamically below (module-level singletons need resetting
@@ -62,6 +64,13 @@ let relaySessionCalls = 0
 let getMessagesResult: unknown[] = []
 // The interruption reason the stub reports for a resumed session.
 let interruptionReason: 'tool-call-unanswered' | 'no-reply' | null = null
+// What the stubbed pi.start reports. A test that needs a start which does not
+// reach 'running' sets this; the default is a ready runtime.
+let startResult: { status: 'running' | 'starting' | 'stopped' | 'error'; pid: number | null; error: string | null } = {
+  status: 'running',
+  pid: 1,
+  error: null,
+}
 // What the stubbed session.delete reports. `replacementSessionPath` mirrors
 // the runtime main promoted while closing the deleted session's tab.
 let sessionDeleteResult: SessionDeleteResult = { ok: true, method: 'trash', replacementSessionPath: null }
@@ -181,7 +190,7 @@ const piDesktopStub = {
   pi: {
     start: async () => {
       calls.push('pi.start')
-      return { status: 'running' as const, pid: 1, error: null }
+      return startResult
     },
     restart: async () => {
       calls.push('pi.restart')
@@ -2983,4 +2992,41 @@ test('a flapping connection does not erase the rows already listed', async () =>
   await new Promise((resolve) => setTimeout(resolve, 400))
   assert.equal(relaySessionCalls, callsBefore, 'an unconnected empty roster is not even fetched')
   assert.equal(useAppStore.getState().sessionList.filter((i) => i.remote).length, 1, 'the row survives')
+})
+
+test('a prompt sent while the agent is still starting is held, not dropped', async () => {
+  // The old path did `if (piStatus !== 'running') { await startPi(); if (piStatus
+  // !== 'running') return }` — a start that never reached 'running' threw the
+  // user's text away with no message. It is now held in this chat's queue.
+  startResult = { status: 'starting', pid: null, error: null }
+  calls.length = 0
+  useAppStore.setState({
+    currentView: 'chat',
+    piStatus: 'stopped',
+    // The queue key comes from the chat, so give this one an identity the same
+    // way a loaded session would.
+    activeChatKey: localQueueKey('/sessions/one.jsonl', 'rt-1'),
+    isStreaming: false,
+    messages: [],
+    sendQueues: {},
+    heldSendQueues: [],
+    promptHistory: [],
+    settings: { ...DEFAULT_SETTINGS },
+  })
+
+  await useAppStore.getState().sendPrompt('remember this thought')
+
+  const state = useAppStore.getState()
+  assert.ok(!calls.some((call) => call.startsWith('prompt:')), 'the prompt is not sent to a runtime that is not ready')
+  const queueKey = state.activeChatKey
+  assert.ok(queueKey !== '', 'the chat has a queue key')
+  assert.ok(queueKey.startsWith('local'), 'the key names this local chat')
+  const queued = state.sendQueues[queueKey] ?? []
+  assert.equal(queued.length, 1, 'the text is kept in this chat queue')
+  assert.equal(queued[0]?.text, 'remember this thought')
+  assert.ok(state.heldSendQueues.includes(queueKey), 'the queue is held until the runtime is ready')
+  assert.ok(
+    state.messages.some((message) => message.role === 'system' && message.content.includes('waiting')),
+    'the user is told why nothing was sent'
+  )
 })

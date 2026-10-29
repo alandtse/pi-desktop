@@ -1805,6 +1805,7 @@
       "notAFolder": "无法作为项目打开 — 不是文件夹：{{path}}",
       "notGitRepository": "此项目不是 Git 仓库。要另开对话请使用“新建会话”，或打开 Git 项目以使用隔离标签页。",
       "openFolderError": "打开文件夹错误：{{detail}}",
+      "promptHeldUntilReady": "你的提示已排队：代理尚未完成启动，就绪后会自动发送。",
       "remoteHistoryTruncated_other": "仅显示最近的 {{count}} 轮。另一台机器限制了发送的历史长度（REMOTE_PI_SYNC_LIMIT，默认 30）；可在该机器上调高。",
       "removedPackage": "已移除 {{spec}}",
       "removePackageFailed": "移除失败",

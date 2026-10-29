@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { test } from 'node:test'
 import {
   HEAD_SCAN_BYTES,
+  MAX_NAME_SCAN_BYTES,
   MAX_PREVIEW_SCAN_BYTES,
   TAIL_SCAN_BYTES,
   clearSessionMetadataCache,
@@ -569,6 +570,38 @@ test('readSessionMetadata finds a rename buried mid-file behind large output', a
     ],
     async (path) => {
       assert.equal((await readSessionMetadata(path)).name, 'Buried rename')
+    }
+  )
+})
+
+test('a rename past the scan ceiling is not hunted for', async () => {
+  // The mid-file walk used to read to EOF, which cost 155-207ms of IO on a 46MB
+  // session and ran on every tab switch. Past the ceiling the row falls back to
+  // its preview rather than stalling the list.
+  const chunk = 'x'.repeat(64 * 1024)
+  // Divide by chunk.length, not by chunk: a number divided by a string is NaN,
+  // and Array.from({length: NaN}) builds nothing, which silently made this test
+  // exercise a tiny file.
+  const padLines = Math.ceil(MAX_NAME_SCAN_BYTES / chunk.length) + 4
+  // More than TAIL_SCAN_BYTES of output AFTER the rename, so neither bounded
+  // range can see it and only the (now capped) walk could. The walk gives up at
+  // MAX_NAME_SCAN_BYTES, and the rename sits past that.
+  const tailLines = Math.ceil((2 * TAIL_SCAN_BYTES) / chunk.length) + 2
+  await withSessionFile(
+    [
+      headerLine(),
+      userLine(textBlocks('Refactor auth')),
+      ...Array.from({ length: padLines }, () => messageLine('assistant', textBlocks(chunk))),
+      // Both head and tail miss it, so only the bounded walk could find it.
+      sessionInfoLine('Buried rename'),
+      ...Array.from({ length: tailLines }, () => messageLine('assistant', textBlocks(chunk))),
+    ],
+    async (path) => {
+      const metadata = await readSessionMetadata(path)
+      assert.notEqual(metadata.name, 'Buried rename')
+      // It still returns a usable row: the point is to bound the work, not to
+      // lose the session.
+      assert.equal(metadata.contentState, 'non-empty')
     }
   )
 })

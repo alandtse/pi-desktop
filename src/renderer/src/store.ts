@@ -1952,7 +1952,27 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
     // the chat shows one, otherwise a new session for the empty chat.
     if (get().piStatus !== 'running') {
       await get().startPi()
-      if (get().piStatus !== 'running') return
+      // A start that did not reach 'running' used to drop the prompt silently:
+      // the user's text simply vanished. Hold the queue for this chat instead, so
+      // the prompt goes out when the runtime does become ready, and say why
+      // nothing has been sent yet. `holdSendQueue` is the same gate a failed turn
+      // uses, so a later turn completes the release path rather than a new one.
+      if (get().piStatus !== 'running') {
+        const queueKey = activeQueueKey(get())
+        holdSendQueue(set, get, queueKey)
+        // Keep the TEXT, not the attachments: the queued-prompt type carries
+        // composer attachments, while this point already holds display ones, and
+        // silently re-shaping one into the other would drop the image content.
+        // The text is what the user would otherwise lose.
+        if (message.trim() !== '') get().queuePrompt(queueKey, message, [])
+        get().addMessage({
+          id: generateId(),
+          role: 'system',
+          content: t('store.messages.promptHeldUntilReady'),
+          timestamp: Date.now(),
+        })
+        return
+      }
     }
     // The user sends again, so a held queue may go on after this turn.
     releaseSendQueue(set, get)

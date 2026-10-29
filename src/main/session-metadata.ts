@@ -36,6 +36,16 @@ export const TAIL_SCAN_BYTES = 256 * 1024
 /** Hard ceiling on the streaming preview fallback. */
 export const MAX_PREVIEW_SCAN_BYTES = 1024 * 1024
 /**
+ * Bytes the mid-file rename walk will read before giving up.
+ *
+ * The full walk exists for a rename buried behind large tool output, but it used
+ * to read to EOF. On a 46 MB session that measured 155-207 ms of file IO, and the
+ * session list runs this on every tab switch, so one long chat made every switch
+ * slow. A rename that sits past this much output is not worth that: the row falls
+ * back to its preview instead of stalling the list.
+ */
+export const MAX_NAME_SCAN_BYTES = 4 * 1024 * 1024
+/**
  * Entries kept in the mtime-keyed cache. Sized for a whole-store lineage walk
  * rather than the 100-row session list, so a large store does not thrash.
  */
@@ -388,13 +398,18 @@ export async function inspectSessionContent(filePath: string): Promise<SessionCo
 /** Full line-by-line stream for a name that head and tail both missed. */
 async function streamLatestName(filePath: string): Promise<string | null> {
   let stream
+  let scanned = 0
   try {
     stream = createReadStream(filePath, { encoding: 'utf-8' })
     const rl = createInterface({ input: stream, crlfDelay: Infinity })
     let name: string | null = null
     for await (const line of rl) {
+      scanned += Buffer.byteLength(line, 'utf-8') + 1
       const result = sessionInfoNameFromLine(line)
       if (result !== undefined) name = result
+      if (scanned >= MAX_NAME_SCAN_BYTES) break
+      // Bounded: a rename this far into the file is behind more output than a
+      // list row is worth, and the caller already has the head/tail answers.
     }
     return name
   } catch {
