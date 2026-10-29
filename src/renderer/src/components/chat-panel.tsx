@@ -362,6 +362,10 @@ export function ChatPanel(): React.JSX.Element {
               return (
                 <>
                   <div ref={scrollRef} onScroll={onScroll} className="flex-1 overflow-y-auto">
+                    {/* Only when there is genuinely nothing to show. Once the
+                        cached transcript is on screen the load is a refresh,
+                        and swapping the conversation out for a spinner threw
+                        away the history the user was reading. */}
                     {sessionLoading && messages.length === 0 && !isStreaming ? (
                       <div className="flex h-full flex-col items-center justify-center gap-2 text-sm text-dim">
                         <div className="h-5 w-5 animate-spin rounded-full border-2 border-border-strong border-t-accent" />

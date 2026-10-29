@@ -3203,3 +3203,48 @@ test('a cached transcript is not reused while the session is streaming', async (
 
   assert.equal(calls.filter((c) => c === 'getMessages').length, 1, 'a live turn is never served from cache')
 })
+
+test('switching to a project tab paints its cached chat before the load lands', async () => {
+  // Clicking a project tab cleared the transcript and then waited for main to
+  // say which session the project resumes, so the tab showed the loading
+  // spinner for the whole round-trip even when that conversation was already in
+  // the cache. The resume target is a metadata read, and the paint has to
+  // happen as soon as it lands — before the switch below it.
+  const workspace = {
+    id: 'ws-tab-paint',
+    name: 'Tab paint',
+    path: '/tmp/workspace-tab-paint',
+    createdAt: 0,
+    lastActiveAt: 0,
+    color: '#000',
+  }
+  const sessionPath = '/tmp/session-tab-paint.jsonl'
+  resumeTargetResult = sessionPath
+  sessionStateResult = resumedSessionState(sessionPath)
+  getMessagesResult = [{ role: 'user', content: [{ type: 'text', text: 'cached tab text' }], timestamp: 1 }]
+  useAppStore.setState({
+    activeWorkspace: workspace,
+    workspaces: [workspace],
+    piStatus: 'running',
+    sessionState: resumedSessionState(sessionPath),
+    activeSessionRuntimeId: 'runtime-tab',
+    activeRemoteRef: null,
+    isStreaming: false,
+    messages: [],
+  })
+  // Fill the cache for this session.
+  await useAppStore.getState().reloadActiveSession({ refreshList: false })
+  assert.equal(useAppStore.getState().messages.length, 1)
+
+  // Now leave and come back the way a tab swap does: the switch clears the
+  // transcript, and the history load is held open so only the cache can paint.
+  let releaseLoad = () => {}
+  getMessagesGate = () => new Promise<void>((resolve) => { releaseLoad = resolve })
+  useAppStore.setState({ activeWorkspace: { ...workspace, id: 'ws-other' }, messages: [] })
+  const activation = useAppStore.getState().activateWorkspace(workspace.id)
+  await activation
+
+  const painted = useAppStore.getState().messages
+  releaseLoad()
+  assert.ok(painted.length > 0, 'the tab showed its cached chat instead of a spinner')
+})
