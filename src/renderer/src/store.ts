@@ -878,26 +878,52 @@ let historyLoadId = 0
  * stream covers for the session in view and cannot cover for one it is not.
  * Bounded so a long run of distinct sessions does not keep every transcript.
  */
-const MAX_CACHED_TRANSCRIPTS = 8
+const MAX_CACHED_TRANSCRIPTS = 16
+/**
+ * Ceiling on the whole cache, in characters of retained message text.
+ *
+ * A count alone does not bound memory: a transcript is up to 150 messages with
+ * every text/tool blob capped at 80k characters, so one entry can be over ten
+ * megabytes of live JS strings and heap objects. Sixteen of those is more than
+ * the renderer should hold for a convenience cache, and the eviction the count
+ * alone allowed would surface as a GC stall on a tab switch rather than as a
+ * miss. Chars are a cheap proxy: they are what dominates the retained size.
+ */
+const MAX_CACHED_CHARS = 48_000_000
 interface CachedTranscript {
   messages: DisplayMessage[]
   /** Message count the Pi reported; a mismatch means the cache is behind. */
   total: number
+  /** Rough retained size, so the budget above can be enforced on insert. */
+  chars: number
 }
 const transcriptCache = new Map<string, CachedTranscript>()
 // Session files are compared through the same folding the rest of the app uses,
 // so a path reported with different casing still hits its own entry on Windows.
 const transcriptKey = (sessionPath: string): string => pathGroupKey(sessionPath)
 
+/** Retained text of one message: bodies, reasoning and tool payloads. */
+function messageChars(message: DisplayMessage): number {
+  let chars = message.content.length + (message.thinking?.length ?? 0)
+  for (const call of message.toolCalls ?? []) {
+    chars += call.arguments.length + (call.result?.length ?? 0)
+  }
+  return chars
+}
+
 function cacheTranscript(sessionPath: string, entry: CachedTranscript): void {
   const key = transcriptKey(sessionPath)
   // Re-inserting moves the key to the end, making eviction least-recently-used.
   transcriptCache.delete(key)
   transcriptCache.set(key, entry)
-  while (transcriptCache.size > MAX_CACHED_TRANSCRIPTS) {
+  let total = 0
+  for (const cached of transcriptCache.values()) total += cached.chars
+  while (transcriptCache.size > MAX_CACHED_TRANSCRIPTS || (total > MAX_CACHED_CHARS && transcriptCache.size > 1)) {
     const oldest = transcriptCache.keys().next()
     if (oldest.done) break
+    const evicted = transcriptCache.get(oldest.value)
     transcriptCache.delete(oldest.value)
+    total -= evicted?.chars ?? 0
   }
 }
 
@@ -2756,7 +2782,10 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
           // the composer key (and every draft and queue behind it) to
           // `local-rt:unknown` whenever that answer had not landed yet.
           const sessionFile = get().switchingToSessionFile ?? get().sessionState?.sessionFile
-          if (sessionFile) cacheTranscript(sessionFile, { messages: finalMessages, total })
+          if (sessionFile) {
+            const chars = finalMessages.reduce((sum, message) => sum + messageChars(message), 0)
+            cacheTranscript(sessionFile, { messages: finalMessages, total, chars })
+          }
           // Recall belongs to the chat, so it comes from the chat's own turns.
           set({
             messages: finalMessages,
@@ -4675,6 +4704,10 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
   deleteSession: async (session) => {
     try {
       const result = await window.piDesktop.session.delete(session.path)
+      // The transcript is gone from disk; keeping it pinned in memory helps no
+      // one, and a new session written to the same path would otherwise be
+      // served the deleted one's conversation.
+      if (result.ok) invalidateSessionTranscript(session.path)
       if (result.ok) {
         // Refresh list and prune archive entry locally
         set((state) => {
