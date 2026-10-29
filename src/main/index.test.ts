@@ -116,7 +116,6 @@ test('one native macOS quit exits even when shutdown resolves immediately', {
         stopAll: () => { calls.push('stop-all'); }
       };
       const workspaceTerminals = { stopAll: () => calls.push('stop-terminals') };
-      const relayBridge = { dispose: () => calls.push('dispose-relay') };
       const destroyTray = () => calls.push('destroy-tray');
       const activityStatsStore = { flushSync: () => calls.push('flush-stats') };
       const appLog = {
