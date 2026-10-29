@@ -149,8 +149,12 @@ test('one native macOS quit exits even when shutdown resolves immediately', {
     const env = { ...process.env }
     delete env.ELECTRON_RUN_AS_NODE
     const electron = createRequire(import.meta.url)('electron') as string
+    // A lone probe exits in ~1s, but the process teardown contends with the rest of
+    // the suite (8 files run concurrently by default) and has been measured past
+    // 10s. The lifecycle itself always completes — `quit-complete` is written before
+    // this deadline — so the budget only has to cover Electron shutting down.
     const result = spawnSync(electron, [probe], {
-      env, encoding: 'utf8', timeout: 10_000, killSignal: 'SIGKILL',
+      env, encoding: 'utf8', timeout: 30_000, killSignal: 'SIGKILL',
     })
     assert.equal(result.error, undefined, `native quit did not exit: ${result.error?.message}\n${result.stdout}\n${result.stderr}`)
     assert.equal(result.status, 0, result.stderr)
