@@ -3302,3 +3302,104 @@ test('a cache hit still restores the model the picker shows', async () => {
   assert.ok(state.sessionState?.model, 'the model the picker reads was restored')
   assert.equal(state.sessionState?.model?.id, 'deepseek-v4.1-flash:1017', 'and it is the session\'s own model')
 })
+
+test('deleting a session drops its cached transcript', async () => {
+  // The cached bytes outlived the session they described. Nothing pinned them
+  // on purpose, but a path is a reusable key: a new session written to the same
+  // file would have been served the deleted one's conversation, and the memory
+  // was held for a session that no longer existed.
+  const workspace = {
+    id: 'ws-delete-cache',
+    name: 'Delete cache',
+    path: '/tmp/workspace-delete-cache',
+    createdAt: 0,
+    lastActiveAt: 0,
+    color: '#000',
+  }
+  const sessionPath = '/tmp/session-delete-cache.jsonl'
+  const stateAt = (count: number): SessionState =>
+    ({ sessionFile: sessionPath, messageCount: count } as unknown as SessionState)
+
+  activeWorkspaceResult = workspace
+  sessionStateResult = stateAt(1)
+  getMessagesResult = [{ role: 'user', content: [{ type: 'text', text: 'doomed turn' }], timestamp: 1 }]
+  useAppStore.setState({
+    activeWorkspace: workspace,
+    workspaces: [workspace],
+    piStatus: 'running',
+    sessionState: stateAt(1),
+    activeSessionRuntimeId: 'runtime-delete',
+    activeRemoteRef: null,
+    isStreaming: false,
+    messages: [],
+  })
+  // Fill the cache.
+  await useAppStore.getState().reloadActiveSession({ refreshList: false })
+  calls.length = 0
+
+  sessionDeleteResult = { ok: true, method: 'unlink' as const }
+  await useAppStore.getState().deleteSession({ path: sessionPath, sessionId: 's-delete' } as never)
+
+  // Coming back with the same count must now fetch: the cache must not answer
+  // for a session that was deleted.
+  sessionStateResult = stateAt(1)
+  useAppStore.setState({ sessionState: stateAt(1), messages: [] })
+  await useAppStore.getState().reloadActiveSession({ refreshList: false })
+  assert.ok(calls.includes('getMessages'), 'a deleted session is refetched, not served from cache')
+})
+
+test('the transcript cache is bounded by retained text, not just by entry count', async () => {
+  // A count cap alone did not bound memory: one entry can be 150 messages with
+  // every blob at the 80k-character trim ceiling, so sixteen of them is far more
+  // than a convenience cache should hold, and the resulting GC stall would look
+  // like the tab switching it was meant to make cheap.
+  //
+  // Fill the cache with oversized sessions and confirm the oldest ones go.
+  const big = 'x'.repeat(4_000_000)
+  const paths = Array.from({ length: 14 }, (_, index) => `/tmp/session-budget-${index}.jsonl`)
+  const workspace = {
+    id: 'ws-budget',
+    name: 'Budget',
+    path: '/tmp/workspace-budget',
+    createdAt: 0,
+    lastActiveAt: 0,
+    color: '#000',
+  }
+
+  for (const path of paths) {
+    // Each session is loaded through the normal path so it lands in the cache.
+    resumeTargetResult = path
+    sessionStateResult = { sessionFile: path, messageCount: 1 } as unknown as SessionState
+    getMessagesResult = [{ role: 'user', content: [{ type: 'text', text: big }], timestamp: 1 }]
+    useAppStore.setState({
+      activeWorkspace: workspace,
+      workspaces: [workspace],
+      piStatus: 'running',
+      sessionState: { sessionFile: path, messageCount: 1 } as unknown as SessionState,
+      activeSessionRuntimeId: `runtime-budget-${path}`,
+      activeRemoteRef: null,
+      isStreaming: false,
+      messages: [],
+    })
+    await useAppStore.getState().reloadActiveSession({ refreshList: false })
+  }
+
+  // The earliest session must have been evicted under the text budget, even
+  // though only 14 entries were ever added and the count cap is 16.
+  calls.length = 0
+  resumeTargetResult = paths[0]
+  sessionStateResult = { sessionFile: paths[0], messageCount: 1 } as unknown as SessionState
+  useAppStore.setState({
+    activeWorkspace: workspace,
+    sessionState: { sessionFile: paths[0], messageCount: 1 } as unknown as SessionState,
+    switchingToSessionFile: paths[0],
+    activeRemoteRef: null,
+    isStreaming: false,
+    messages: [],
+  })
+  await useAppStore.getState().reloadActiveSession({ refreshList: false })
+  assert.ok(
+    calls.includes('getMessages'),
+    'the oldest oversized transcript was evicted by the text budget, so it refetches'
+  )
+})
