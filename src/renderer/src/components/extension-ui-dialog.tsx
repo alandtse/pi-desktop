@@ -284,6 +284,25 @@ function ConfirmDialog({
 
 // ─── Input Dialog ────────────────────────────────────────────────────────────
 
+/**
+ * The prompt hint as text. A Pi can send a non-string here — remote-pi's setup
+ * wizard passes `ui.input(title, { defaultValue })`, an object where the SDK
+ * declares a placeholder string — and rendering that raw shows `[object Object]`
+ * in the field. Anything unusable becomes no hint rather than that word.
+ */
+export function readableHint(hint: unknown): string {
+  if (typeof hint === 'string') return hint
+  if (typeof hint === 'number' || typeof hint === 'boolean') return String(hint)
+  if (hint && typeof hint === 'object') {
+    const record = hint as Record<string, unknown>
+    for (const key of ['defaultValue', 'default', 'value', 'placeholder']) {
+      const candidate = record[key]
+      if (typeof candidate === 'string' && candidate.length > 0) return candidate
+    }
+  }
+  return ''
+}
+
 function InputDialog({
   request,
   onSubmit,
@@ -302,7 +321,7 @@ function InputDialog({
       <DialogBox prompt={request.title ?? t('chat.extensionUi.inputFallbackTitle')} onCancel={onCancel} onHide={onHide}>
         <input
           type="text"
-          placeholder={request.placeholder ?? ''}
+          placeholder={readableHint(request.placeholder)}
           value={value}
           onChange={(e) => setValue(e.target.value)}
           autoFocus
