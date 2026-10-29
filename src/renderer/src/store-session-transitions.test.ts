@@ -2120,9 +2120,12 @@ test('opening a mid-turn session row leaves the other runtime working', async ()
     active: true,
   })
   // Flush the microtask chain the fire-and-forget hydration rides on — no
-  // wall-clock wait needed for a mocked getMessages.
-  await Promise.resolve()
-  await Promise.resolve()
+  // wall-clock wait needed for a mocked getMessages. One extra tick because
+  // reloadActiveSession now awaits the state read (its message count decides
+  // whether the history fetch can be skipped) before asking for messages.
+  // The count read is awaited before the history fetch, so the chain is one
+  // IPC hop longer than it was.
+  for (let tick = 0; tick < 8; tick++) await Promise.resolve()
 
   assert.equal(calls.includes('getMessages'), true, 'the running event hydrates history')
   assert.equal(useAppStore.getState().sessionLoading, false)
@@ -3068,4 +3071,135 @@ test('text typed while a chat is opening belongs to that chat, not the one being
 
   const after = useAppStore.getState()
   assert.equal(after.activeChatKey, queueKey, 'the destination key does not change when the history lands')
+})
+
+test('returning to an unchanged session refetches nothing', async () => {
+  // Cycling tabs refetched get_messages every time. Painting from cache fixed
+  // the flash of spinner, but the switch still paid a full round-trip and
+  // re-parse for a chat that had not changed. get_state reports the same
+  // message count it reported when the cache was filled, so the fetch can be
+  // skipped outright — that is the difference between "repaints sooner" and
+  // "does not wait at all".
+  const workspace = {
+    id: 'ws-cache-skip',
+    name: 'Cache skip',
+    path: '/tmp/workspace-cache-skip',
+    createdAt: 0,
+    lastActiveAt: 0,
+    color: '#000',
+  }
+  const sessionPath = '/tmp/session-cache-skip.jsonl'
+  const stateAt = (count: number): SessionState =>
+    ({ sessionFile: sessionPath, messageCount: count } as unknown as SessionState)
+
+  activeWorkspaceResult = workspace
+  sessionStateResult = stateAt(1)
+  getMessagesResult = [{ role: 'user', content: [{ type: 'text', text: 'unchanged turn' }], timestamp: 1 }]
+  useAppStore.setState({
+    activeWorkspace: workspace,
+    workspaces: [workspace],
+    piStatus: 'running',
+    sessionState: stateAt(1),
+    activeSessionRuntimeId: 'runtime-skip',
+    activeRemoteRef: null,
+    isStreaming: false,
+    messages: [],
+  })
+  // First load has no cache, so it must fetch and fill the cache with total 1.
+  await useAppStore.getState().reloadActiveSession({ refreshList: false })
+  assert.equal(useAppStore.getState().messages.length, 1, 'the first load fetched the transcript')
+  calls.length = 0
+
+  // Return with the same count reported: nothing has moved, so nothing to fetch.
+  sessionStateResult = stateAt(1)
+  useAppStore.setState({ sessionState: stateAt(1), messages: [] })
+  await useAppStore.getState().reloadActiveSession({ refreshList: false })
+
+  assert.equal(calls.filter((c) => c === 'getMessages').length, 0, 'an unchanged session is not refetched')
+  assert.equal(useAppStore.getState().messages.length, 1, 'the transcript on screen came from the cache')
+  assert.equal(useAppStore.getState().sessionLoading, false, 'a cache hit is not left loading')
+  assert.equal(useAppStore.getState().switchingToSessionFile, null, 'the pending target is cleared')
+})
+
+test('a session that gained a turn bypasses its cached transcript', async () => {
+  // The count is the whole safety argument for skipping the fetch, so a count
+  // that moved has to fall back to the fetch. Otherwise the tab would keep
+  // showing a conversation that is missing its newest answer.
+  const workspace = {
+    id: 'ws-cache-stale',
+    name: 'Cache stale',
+    path: '/tmp/workspace-cache-stale',
+    createdAt: 0,
+    lastActiveAt: 0,
+    color: '#000',
+  }
+  const sessionPath = '/tmp/session-cache-stale.jsonl'
+  const stateAt = (count: number): SessionState =>
+    ({ sessionFile: sessionPath, messageCount: count } as unknown as SessionState)
+
+  activeWorkspaceResult = workspace
+  sessionStateResult = stateAt(1)
+  getMessagesResult = [{ role: 'user', content: [{ type: 'text', text: 'old turn' }], timestamp: 1 }]
+  useAppStore.setState({
+    activeWorkspace: workspace,
+    workspaces: [workspace],
+    piStatus: 'running',
+    sessionState: stateAt(1),
+    activeSessionRuntimeId: 'runtime-stale',
+    activeRemoteRef: null,
+    isStreaming: false,
+    messages: [],
+  })
+  await useAppStore.getState().reloadActiveSession({ refreshList: false })
+  calls.length = 0
+
+  // The Pi answered in the background: count moved, and the fetch returns it.
+  getMessagesResult = [
+    { role: 'user', content: [{ type: 'text', text: 'old turn' }], timestamp: 1 },
+    { role: 'assistant', content: [{ type: 'text', text: 'new answer' }], timestamp: 2 },
+  ]
+  sessionStateResult = stateAt(3)
+  useAppStore.setState({ sessionState: stateAt(3), messages: [] })
+  await useAppStore.getState().reloadActiveSession({ refreshList: false })
+
+  assert.equal(calls.filter((c) => c === 'getMessages').length, 1, 'a changed count still refetches')
+  assert.equal(useAppStore.getState().messages.length, 2, 'the newer transcript replaced the cached one')
+})
+
+test('a cached transcript is not reused while the session is streaming', async () => {
+  // A running turn changes the transcript without a stable final count, so the
+  // count comparison means nothing while it runs. Streaming must always refetch.
+  const workspace = {
+    id: 'ws-cache-streaming',
+    name: 'Cache streaming',
+    path: '/tmp/workspace-cache-streaming',
+    createdAt: 0,
+    lastActiveAt: 0,
+    color: '#000',
+  }
+  const sessionPath = '/tmp/session-cache-streaming.jsonl'
+  const stateAt = (count: number): SessionState =>
+    ({ sessionFile: sessionPath, messageCount: count } as unknown as SessionState)
+
+  activeWorkspaceResult = workspace
+  sessionStateResult = stateAt(1)
+  getMessagesResult = [{ role: 'user', content: [{ type: 'text', text: 'mid turn' }], timestamp: 1 }]
+  useAppStore.setState({
+    activeWorkspace: workspace,
+    workspaces: [workspace],
+    piStatus: 'running',
+    sessionState: stateAt(1),
+    activeSessionRuntimeId: 'runtime-streaming',
+    activeRemoteRef: null,
+    isStreaming: false,
+    messages: [],
+  })
+  await useAppStore.getState().reloadActiveSession({ refreshList: false })
+  calls.length = 0
+
+  sessionStateResult = stateAt(1)
+  useAppStore.setState({ sessionState: stateAt(1), messages: [], isStreaming: true })
+  await useAppStore.getState().reloadActiveSession({ refreshList: false })
+
+  assert.equal(calls.filter((c) => c === 'getMessages').length, 1, 'a live turn is never served from cache')
 })

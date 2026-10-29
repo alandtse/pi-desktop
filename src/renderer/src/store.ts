@@ -2618,6 +2618,10 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
     // round-trip is what made switching feel slow.
     const currentSessionFile = get().switchingToSessionFile ?? get().sessionState?.sessionFile
     const cached = currentSessionFile ? transcriptCache.get(transcriptKey(currentSessionFile)) : undefined
+    // A cached entry records the count the Pi reported when it was filled. A
+    // remote row reports a placeholder count rather than the real one, so its
+    // cache can never be validated and must always refetch.
+    const cachedIsLocal = !get().activeRemoteRef
     if (cached && cached.messages.length > 0 && get().messages.length === 0) {
       set({ messages: cached.messages })
     }
@@ -2626,9 +2630,49 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
     const isCurrent = (): boolean => loadId === historyLoadId && gen === sessionLoadGeneration &&
       runtimeId === get().activeSessionRuntimeId && workspaceId === get().activeWorkspace?.id
     set({ sessionLoading: true })
-    void get().refreshSessionState()
     void get().refreshSessionStats()
 
+    // Skip the expensive fetch when the Pi has not moved on. get_messages ships
+    // every body for the last MAX_MESSAGES_FOR_UI turns, and the renderer then
+    // re-parses all of it in chunks; get_state ships a number. Trimming is a
+    // pure function of the total count, so equal counts mean the same window.
+    //
+    // Asked directly rather than read from the store, and deliberately not
+    // awaited before the store's own refresh: the switch path depends on that
+    // refresh and the history fetch overlapping, and resolving it first makes
+    // later broadcasts mistake a settled load for a pending one.
+    //
+    // Anything uncertain (no cached count, a remote row, a live turn) falls
+    // through to the fetch, which stays the correctness path.
+    let cacheIsCurrent = false
+    if (cachedIsLocal && cached && cached.messages.length > 0 && !get().isStreaming &&
+        typeof cached.total === 'number' && cached.total > 0) {
+      try {
+        const probe = await window.piDesktop.session.getState() as
+          { success?: boolean; data?: { messageCount?: unknown } } | null
+        if (!isCurrent()) return
+        const probeCount = probe?.success ? probe.data?.messageCount : undefined
+        cacheIsCurrent = typeof probeCount === 'number' && probeCount === cached.total
+      } catch {
+        // No answer is not an answer: fall through to the fetch.
+        cacheIsCurrent = false
+      }
+    }
+    if (cacheIsCurrent && cached) {
+      set({
+        messages: cached.messages,
+        sessionLoading: false,
+        promptHistory: promptHistoryFrom(cached.messages),
+        activeChatKey: localQueueKey(currentSessionFile ?? null, runtimeId),
+        switchingToSessionFile: null,
+      })
+      if (refreshList) scheduleSessionListRefresh(get)
+      if (loadId === historyLoadId) historyLoadingRuntime = null
+      return
+    }
+
+    // Missed the cache: refill the session state as before, then fetch.
+    void get().refreshSessionState()
     try {
       const response = await window.piDesktop.session.getMessages()
       if (!isCurrent()) return
