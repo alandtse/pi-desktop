@@ -122,7 +122,12 @@ test('one native macOS quit exits even when shutdown resolves immediately', {
         warn: () => calls.push('warn'),
         flushSync: () => calls.push('flush-log')
       };
-      const relayBridge = { dispose: () => calls.push('dispose-relay') };
+      // will-quit nulls this after disposing, so it cannot be a const.
+      let relayBridge = { dispose: () => calls.push('dispose-relay') };
+      // will-quit calls recordMidTurnOnce(), which reads turnTracker and runId.
+      // Without them the handler throws and the whole teardown is skipped.
+      const turnTracker = null;
+      const runId = null;
       const cleanupPiChildTempDir = () => calls.push('cleanup-temp');
       ${ts.transpile(lifecycle, { target: ts.ScriptTarget.ES2022 })}
       app.on('quit', () => {
