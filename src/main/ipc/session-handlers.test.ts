@@ -211,3 +211,53 @@ test('the resume target is the project runtime session, else its newest used fil
     await rm(root, { recursive: true, force: true })
   }
 })
+
+test('a new chat gets its own worktree only when it asks for one', async () => {
+  const require = createRequire(import.meta.url)
+  const electronPath = require.resolve('electron')
+  require('electron')
+  const electronModule = require.cache[electronPath]!
+  const originalExports = electronModule.exports
+  handlers.clear()
+  electronModule.exports = {
+    ipcMain: { handle: (channel: string, handler: (...args: unknown[]) => unknown) => handlers.set(channel, handler) },
+    app: { isPackaged: false, getAppPath: () => process.cwd() },
+  }
+  const root = await mkdtemp(join(tmpdir(), 'pi-new-worktree-'))
+  configureGuiDataDir(root)
+  try {
+    const { registerSessionHandlers } = await import('./session-handlers')
+    const created: string[] = []
+    const worktrees: string[] = []
+    const runtime = (workspaceId: string): SessionRuntimeInfo => ({ runtimeId: `run-${workspaceId}`, workspaceId }) as SessionRuntimeInfo
+    registerSessionHandlers({
+      workspaceManager: {
+        getActiveWorkspace: () => ({ id: 'project', path: root }),
+        getWorkspaces: () => [{ id: 'project', path: root }],
+        createNewSessionRuntime: async (workspaceId: string) => {
+          created.push(workspaceId)
+          return runtime(workspaceId)
+        },
+        createWorktreeWorkspace: async (options: { sourceWorkspaceId?: string }) => {
+          worktrees.push(options.sourceWorkspaceId ?? 'none')
+          return { id: 'worktree-1', path: root }
+        },
+        startSessionRuntime: async () => runtime('ignored'),
+      },
+    } as unknown as IpcContext)
+
+    await handlers.get(IPC_CHANNELS.SESSION_NEW)!(null)
+    // A click passing its event object must not be read as a request for a
+    // worktree: only the explicit flag may branch the work.
+    await handlers.get(IPC_CHANNELS.SESSION_NEW)!(null, { ownWorktree: false })
+    assert.deepEqual(worktrees, [], 'sharing the project folder is the default')
+    assert.deepEqual(created, ['project', 'project'])
+
+    await handlers.get(IPC_CHANNELS.SESSION_NEW)!(null, { ownWorktree: true })
+    assert.deepEqual(worktrees, ['project'], 'the worktree is cut from the project on screen')
+    assert.deepEqual(created, ['project', 'project', 'worktree-1'], 'the runtime runs in the new worktree, not the project')
+  } finally {
+    electronModule.exports = originalExports
+    await rm(root, { recursive: true, force: true })
+  }
+})

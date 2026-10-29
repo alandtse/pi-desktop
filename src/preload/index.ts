@@ -125,7 +125,7 @@ interface PiDesktopAPI {
 
   // Session management
   session: {
-    createNew(): Promise<SessionRuntimeInfo>
+    createNew(options?: { ownWorktree?: boolean }): Promise<SessionRuntimeInfo>
     launchTask(options: SessionLaunchTaskOptions): Promise<SessionRuntimeInfo>
     closeRuntime(runtimeId: string): Promise<SessionRuntimeCloseResult | null>
     switch(sessionPath: string, cwd?: string): Promise<SessionRuntimeInfo>
@@ -521,7 +521,7 @@ const api: PiDesktopAPI = {
   },
 
   session: {
-    createNew: () => ipcRenderer.invoke(IPC_CHANNELS.SESSION_NEW),
+    createNew: (options?: { ownWorktree?: boolean }) => ipcRenderer.invoke(IPC_CHANNELS.SESSION_NEW, options),
     launchTask: (options) => ipcRenderer.invoke(IPC_CHANNELS.SESSION_LAUNCH_TASK, options),
     closeRuntime: (runtimeId) => ipcRenderer.invoke(IPC_CHANNELS.SESSION_CLOSE_RUNTIME, runtimeId),
     switch: (sessionPath, cwd) => ipcRenderer.invoke(IPC_CHANNELS.SESSION_SWITCH, sessionPath, cwd),

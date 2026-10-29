@@ -90,6 +90,10 @@ export function Sidebar(): React.JSX.Element {
   const { show: showMenu, ContextMenuComponent: SessionMenu } = useContextMenu()
 
   const [archivedOpen, setArchivedOpen] = useState(false)
+  // A new chat normally shares the project folder. Ticking this gives it its own
+  // git worktree instead, so two chats in one project cannot overwrite each
+  // other's files. Only offered in a repository: the worktree needs a HEAD.
+  const [ownWorktree, setOwnWorktree] = useState(false)
 
   // Sessions on other machines, driven over the relay. They are not files on
   // this disk, so they cannot come from `sessionList`; the relay is the only
@@ -324,7 +328,14 @@ export function Sidebar(): React.JSX.Element {
       return
     }
     setCurrentView('chat')
-    await createNewSession()
+    const inOwnWorktree = ownWorktree && Boolean(activeWorkspace.repoRoot)
+    try {
+      await createNewSession({ ownWorktree: inOwnWorktree })
+    } finally {
+      // One chat asked for the worktree; the next one starts from the project
+      // again unless the user ticks the box once more.
+      if (inOwnWorktree) setOwnWorktree(false)
+    }
   }
 
   const openProject = async (): Promise<void> => {
@@ -631,6 +642,17 @@ export function Sidebar(): React.JSX.Element {
               ? t('sidebar.newSessionButton.startsIn', { project: activeWorkspace.name })
               : t('sidebar.newSessionButton.openProjectToBegin')}
           </div>
+          {activeWorkspace?.repoRoot ? (
+            <label className="mt-2 flex cursor-pointer items-center gap-2 px-1 text-[11px] text-muted hover:text-primary">
+              <input
+                type="checkbox"
+                checked={ownWorktree}
+                onChange={(event) => setOwnWorktree(event.target.checked)}
+                className="h-3 w-3 shrink-0 accent-accent"
+              />
+              <span>{t('sidebar.newSessionButton.ownWorktree')}</span>
+            </label>
+          ) : null}
         </div>
       </div>
 

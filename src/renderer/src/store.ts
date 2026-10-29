@@ -585,7 +585,7 @@ interface AppActions {
   confirmSessionChange: (action: SessionChangeAction) => Promise<boolean>
 
   // Session
-  createNewSession: () => Promise<void>
+  createNewSession: (options?: { ownWorktree?: boolean }) => Promise<void>
   launchTask: (options: SessionLaunchTaskOptions) => Promise<boolean>
   closeSessionTab: (runtimeId: string) => Promise<void>
   switchSession: (path: string, projectPath?: string) => Promise<void>
@@ -2235,7 +2235,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
 
   // ─── Session ──────────────────────────────────────────────────────────
 
-  createNewSession: async () => {
+  createNewSession: async (options) => {
     // A remote session's "new" is the paired Pi's, not this machine's: asking the
     // local Pi would open a blank local session and silently leave the relay one
     // running. The Pi resets its own view and broadcasts a replacement history.
@@ -2247,7 +2247,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
     try {
       // A new session owns a new Pi process. Never stop or warn about the
       // session the user is leaving; it continues working in the background.
-      const result = await window.piDesktop.session.createNew() as SessionRuntimeInfo | { success?: boolean; error?: string } | null
+      const result = await window.piDesktop.session.createNew(options) as SessionRuntimeInfo | { success?: boolean; error?: string } | null
       if (gen !== sessionLoadGeneration) return
       if (result && 'success' in result && result.success === false) {
         get().addMessage({

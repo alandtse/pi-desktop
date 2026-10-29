@@ -1631,6 +1631,7 @@
     "newSessionButton": {
       "label": "Новая сессия",
       "openProjectToBegin": "Откройте проект для начала",
+      "ownWorktree": "Дать этому чату собственный worktree",
       "shortcutKbd": "Ctrl N",
       "startsIn": "Запускается в {{project}}",
       "titleNoProject": "Сначала откройте проект",

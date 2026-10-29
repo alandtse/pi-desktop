@@ -1541,6 +1541,7 @@
     "newSessionButton": {
       "label": "新建会话",
       "openProjectToBegin": "打开一个项目以开始",
+      "ownWorktree": "为此会话使用独立工作树",
       "shortcutKbd": "Ctrl N",
       "startsIn": "在 {{project}} 中开始",
       "titleNoProject": "请先打开一个项目",

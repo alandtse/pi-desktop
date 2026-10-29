@@ -1571,6 +1571,7 @@
     "newSessionButton": {
       "label": "New session",
       "openProjectToBegin": "Open a project to begin",
+      "ownWorktree": "Give this chat its own worktree",
       "shortcutKbd": "Ctrl N",
       "startsIn": "Starts in {{project}}",
       "titleNoProject": "Open a project first",

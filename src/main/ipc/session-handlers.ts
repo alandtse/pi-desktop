@@ -97,10 +97,17 @@ export function registerSessionHandlers(ctx: IpcContext): void {
 
   // ─── Session Management ─────────────────────────────────────────────────
 
-  ipcMain.handle(IPC_CHANNELS.SESSION_NEW, async (): Promise<SessionRuntimeInfo> => {
+  ipcMain.handle(IPC_CHANNELS.SESSION_NEW, async (_event, input: unknown): Promise<SessionRuntimeInfo> => {
     const workspace = workspaceManager.getActiveWorkspace()
     if (!workspace) throw new Error(t('errors.workspace.noneActive'))
-    const runtime = await workspaceManager.createNewSessionRuntime(workspace.id)
+    // A chat may ask for its own working copy, the way a tab does. The worktree
+    // is a new workspace, so this runs before the runtime: the runtime takes its
+    // cwd from whatever workspace is active when it is created.
+    const ownWorktree = isObject(input) && input.ownWorktree === true
+    const target = ownWorktree
+      ? await workspaceManager.createWorktreeWorkspace({ sourceWorkspaceId: workspace.id })
+      : workspace
+    const runtime = await workspaceManager.createNewSessionRuntime(target.id)
     // Navigation must not wait for Pi startup. The runtime event marks it
     // starting/running and hydrates the renderer when ready.
     void startRuntime(runtime).catch(() => undefined)

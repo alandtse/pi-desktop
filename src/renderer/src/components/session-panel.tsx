@@ -144,7 +144,7 @@ export function SessionPanel(): React.JSX.Element {
               {t('common.refresh')}
             </button>
             <button
-              onClick={createNewSession}
+              onClick={() => void createNewSession()}
               className="flex items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-sm text-white hover:bg-accent-hover transition-colors"
             >
               <Plus size={14} />
@@ -226,7 +226,7 @@ export function SessionPanel(): React.JSX.Element {
             </p>
             {!searchQuery && sessionsScope !== 'current' && (
               <button
-                onClick={createNewSession}
+                onClick={() => void createNewSession()}
                 className="mt-3 text-sm text-accent-fg/80 hover:text-accent-fg"
               >
                 {t('sessions.empty.createFirst')}
