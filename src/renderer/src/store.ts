@@ -1875,6 +1875,18 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
         set({ sessionLoading: false })
         return false
       }
+      // The workspace switch cleared the transcript before main said which
+      // session this project resumes, so arriving at a project tab showed a
+      // spinner for the whole history load. Paint the conversation we already
+      // hold for that session first: switchSession below revalidates it.
+      const cachedEntry = transcriptCache.get(transcriptKey(sessionPath))
+      if (cachedEntry && cachedEntry.messages.length > 0 && get().messages.length === 0) {
+        set({
+          messages: cachedEntry.messages,
+          promptHistory: promptHistoryFrom(cachedEntry.messages),
+          switchingToSessionFile: sessionPath,
+        })
+      }
       await get().switchSession(sessionPath, workspace.path)
       // After the swap, not inside the lookup promise: `startPi` waits on
       // `pendingLastSessionOpen`, and the continuation's own `sendPrompt` starts
