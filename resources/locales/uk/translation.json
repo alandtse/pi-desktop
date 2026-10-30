@@ -222,6 +222,12 @@
     "waitingForResponse": "Очікування відповіді…",
     "pairing": {
       "expiresAt": "Код дійсний до {{time}}"
+    },
+    "todo": {
+      "title": "Завдання",
+      "toggle": "Показати або сховати список завдань",
+      "remaining": "Залишилося {{count}} з {{total}}",
+      "allDone": "Готово: {{count}}"
     }
   },
   "commandGroups": {

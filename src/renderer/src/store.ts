@@ -28,6 +28,7 @@ import { markUnansweredToolCallsRunning, settleRunningToolCall } from './reattac
 import type { PiCommand } from '../../shared/pi-command'
 import type { InterruptedReason } from '../../shared/interrupted-turn'
 import { continuationPrompt } from '../../shared/interrupted-turn'
+import { foldTodoEvent, type TodoSnapshot, type TodoSourceEntry } from './todo-state'
 import type { SkillGroup } from '../../shared/skill-groups'
 import { forkPointForUserMessage, normalizeForkMessages, type ForkPoint } from '../../shared/fork-point'
 import { buildLineageTree, type LineageNode } from '../../shared/session-lineage'
@@ -381,6 +382,8 @@ interface AppState {
   // request it delivers here and replays it on demand (flushPendingPrompts),
   // so clearing this slot never loses the prompt.
   extensionUiRequest: PiExtensionUiRequest | null
+  /** The task list the running chat's branch last recorded, or null when it has none. */
+  todoState: TodoSnapshot | null
   /**
    * Remote request ids this desktop is answering over the relay.
    *
@@ -1473,6 +1476,7 @@ function adoptMainSideActivation(
   get().setPermissionRulesDraft('workspace', null)
   set({
     extensionUiRequest: null,
+    todoState: null,
     previewTarget: null,
     editorDirty: false,
     sessionState: null,
@@ -1728,6 +1732,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
   commands: [],
 
   extensionUiRequest: null,
+    todoState: null,
   extensionNotify: null,
   remotePromptIds: {},
   pendingPromptCounts: {},
@@ -2581,6 +2586,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
           // The dialog belongs to the runtime being left. Main retains its
           // origin and replays it when the user switches back.
           extensionUiRequest: null,
+    todoState: null,
         })
         get().clearMessages()
         // Paint the transcript we already hold BEFORE binding the runtime. The
@@ -2998,6 +3004,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
       sessionStats: null,
       activeSessionRuntimeId: null,
       extensionUiRequest: null,
+    todoState: null,
       activeRemoteRef: ref,
     })
     get().clearMessages()
@@ -3412,6 +3419,12 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
 
   handlePiEvent: (event) => {
     lastAgentEventAt = Date.now()
+    // A task list lives in the branch, not in the transcript, so it is folded here
+    // BEFORE the remote-session guard below: the todo entries describe this Pi, and
+    // a user who switched a tab mid-turn must still find their list when they
+    // switch back.
+    const foldedTodos = foldTodoEvent(get().todoState, event as unknown as TodoSourceEntry)
+    if (foldedTodos) set({ todoState: foldedTodos })
     // A remote session on screen is not this Pi. Its turn events describe a
     // conversation the user is not looking at, and letting them through drives
     // the shared streaming state — the chat would keep rendering the local
@@ -3822,7 +3835,8 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
       set((state) => {
         const next = { ...state.remotePromptIds }
         delete next[id]
-        return { extensionUiRequest: null, remotePromptIds: next }
+        return { extensionUiRequest: null,
+    todoState: null, remotePromptIds: next }
       })
       return
     }
@@ -3896,7 +3910,8 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
     set((state) => {
       const next = { ...state.remotePromptIds }
       delete next[id]
-      return { extensionUiRequest: null, remotePromptIds: next }
+      return { extensionUiRequest: null,
+    todoState: null, remotePromptIds: next }
     })
   },
 
@@ -3921,7 +3936,8 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
     set((state) => {
       const next = { ...state.remotePromptIds }
       delete next[id]
-      return { extensionUiRequest: null, remotePromptIds: next }
+      return { extensionUiRequest: null,
+    todoState: null, remotePromptIds: next }
     })
   },
 
@@ -3947,7 +3963,8 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
         set((state) => {
           const next = { ...state.remotePromptIds }
           delete next[extensionUiRequest.id]
-          return { extensionUiRequest: null, remotePromptIds: next }
+          return { extensionUiRequest: null,
+    todoState: null, remotePromptIds: next }
         })
         return
       }
@@ -4300,6 +4317,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
         sessionState: null,
         sessionStats: null,
         extensionUiRequest: null,
+    todoState: null,
         previewTarget: null,
         editorDirty: false,
         piStatus: live ? 'running' : 'stopped',

@@ -3,6 +3,7 @@ import { agentEngineLabel } from '../../../shared/agent-engine-label'
 import { PI_DESKTOP_PRODUCT_NAME } from '../../../shared/product-name'
 import { ChatInput } from './chat-input'
 import { ChatProjectPicker } from './chat-project-picker'
+import { TodoPanel } from './todo-panel'
 import { CouncilPanels } from './council-panels'
 import { MessageBubble, ToolGroupBubble } from './message-bubble'
 import { StreamingBubble } from './streaming-bubble'
@@ -62,6 +63,7 @@ export function ChatPanel(): React.JSX.Element {
   // the project picker is for starting work on THIS machine, so showing it over
   // a remote session reads as "nothing opened".
   const activeRemoteRef = useAppStore((state) => state.activeRemoteRef)
+  const todoState = useAppStore((state) => state.todoState)
   const remoteHistory = useAppStore((state) => state.remoteHistory)
   const isStreaming = useAppStore((state) => state.isStreaming)
   const reattachedMidTurn = useAppStore((state) => state.reattachedMidTurn)
@@ -361,6 +363,10 @@ export function ChatPanel(): React.JSX.Element {
 
               return (
                 <>
+                  {/* Above the transcript, outside the scroller: the list is context
+                      for reading the conversation, and it should stay put while the
+                      answer scrolls past it. */}
+                  <TodoPanel snapshot={todoState} />
                   <div ref={scrollRef} onScroll={onScroll} className="flex-1 overflow-y-auto">
                     {/* Only when there is genuinely nothing to show. Once the
                         cached transcript is on screen the load is a refresh,

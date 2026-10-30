@@ -206,6 +206,12 @@
     "waitingForResponse": "Waiting for response...",
     "pairing": {
       "expiresAt": "Code valid until {{time}}"
+    },
+    "todo": {
+      "title": "Tasks",
+      "toggle": "Show or hide the task list",
+      "remaining": "{{count}} left of {{total}}",
+      "allDone": "{{count}} done"
     }
   },
   "commandGroups": {

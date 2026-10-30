@@ -198,6 +198,12 @@
     "waitingForResponse": "正在等待回答…",
     "pairing": {
       "expiresAt": "代码有效期至 {{time}}"
+    },
+    "todo": {
+      "title": "任务",
+      "toggle": "显示或隐藏任务列表",
+      "remaining": "剩余 {{count}} / {{total}}",
+      "allDone": "已完成 {{count}}"
     }
   },
   "commandGroups": {
