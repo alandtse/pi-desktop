@@ -129,3 +129,24 @@ test('drops an extension message with an empty body', () => {
   })
   assert.equal(blank, null)
 })
+
+test('an extension message is rendered live, not only after a reload', () => {
+  // `/remote-pi pair` sends its QR and pairing code as a custom_message with no
+  // `role` field. The live `message_start` handler used to accept only
+  // role === 'user', so the code never appeared until the session was reopened
+  // and the record was parsed from history.
+  const record = {
+    type: 'custom_message',
+    customType: 'remote-pi:pair-code',
+    display: true,
+    content: 'remotepi://pair?t=abc&epk=def&n=desktop',
+    timestamp: Date.now(),
+  }
+  const parsed = parseAgentMessage(record)
+  assert.ok(parsed, 'the live record parses')
+  assert.match(parsed!.content, /remotepi:\/\/pair/, 'its content survives into the transcript')
+
+  // Bookkeeping records stay out of the transcript.
+  assert.equal(parseAgentMessage({ ...record, display: false }), null)
+  assert.equal(parseAgentMessage({ ...record, content: '   ' }), null)
+})

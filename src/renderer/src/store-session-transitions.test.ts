@@ -3403,3 +3403,25 @@ test('the transcript cache is bounded by retained text, not just by entry count'
     'the oldest oversized transcript was evicted by the text budget, so it refetches'
   )
 })
+
+test('an extension message reaches the live transcript', () => {
+  // The pairing QR only ever appeared after reopening the session, because the
+  // live message_start handler accepted only role === 'user' and an extension
+  // message carries no role. This drives the live path, so removing that branch
+  // fails here.
+  useAppStore.setState({ messages: [], currentView: 'chat' })
+  useAppStore.getState().handlePiEvent({
+    type: 'message_start',
+    message: {
+      type: 'custom_message',
+      customType: 'remote-pi:pair-code',
+      display: true,
+      content: 'remotepi://pair?t=live',
+      timestamp: Date.now(),
+    },
+  } as unknown as PiRpcEvent)
+
+  const shown = useAppStore.getState().messages
+  assert.equal(shown.length, 1, 'the extension message is on screen without a reload')
+  assert.match(String(shown[0]?.content), /remotepi:\/\/pair\?t=live/)
+})
