@@ -20,6 +20,10 @@ const ROOM: RelayRoomInfo = { cwd: '/Users/a/project', name: 'project', room_id:
  * Locality is decided by connecting to the cwd lock socket, so a fake cannot
  * stand in for it: the test binds a real socket in a temp REMOTE_PI_HOME and
  * lets the probe find it. That is the same signal production relies on.
+ *
+ * The address must be the one `lockAddress` uses, which is a FILE PATH on POSIX but
+ * a NAMED PIPE on Windows. Binding a file path on Windows fails with EACCES, so the
+ * whole locality feature would look broken here when only the fixture was wrong.
  */
 const LOCAL_ROOM_ID = 'LocalRoom001'
 
@@ -27,8 +31,12 @@ function holdLocalLock(roomId: string): { release: () => Promise<void> } {
   const home = mkdtempSync(join(tmpdir(), 'pi-locks-'))
   const dir = join(home, '.pi', 'remote', 'locks')
   mkdirSync(dir, { recursive: true })
+  const address =
+    process.platform === 'win32'
+      ? String.fromCharCode(92, 92, 46, 92) + 'pipe' + String.fromCharCode(92) + 'lock-' + roomId
+      : join(dir, `${roomId}.sock`)
   const server: Server = createServer()
-  server.listen(join(dir, `${roomId}.sock`))
+  server.listen(address)
   const previous = process.env['REMOTE_PI_HOME']
   process.env['REMOTE_PI_HOME'] = home
   resetLocalRoomsCache()

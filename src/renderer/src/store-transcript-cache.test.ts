@@ -47,6 +47,9 @@ let remoteGate = gate()
 let lookupGate = gate()
 let remoteRows: SessionListItem[] = []
 
+/** The rows session.list answers with — kept in step with the seeded list. */
+let listRows: SessionListItem[] = []
+
 function transcript(text: string): DisplayMessage[] {
   return [{ id: `msg-${text}`, role: 'user', content: text, timestamp: 0 }]
 }
@@ -80,7 +83,11 @@ before(async () => {
               data: { messages: [{ type: 'user', role: 'user', content: 'from engine', timestamp: 0 }], totalMessageCount: 1 },
             }
           },
-          list: async () => [],
+          // Mirrors the seeded sessionList. A stub that answers `[]` while the test
+          // asserts a session exists contradicts its own fixture: the delayed list
+          // refresh then wipes the row the projection reads, and whether that lands
+          // before the assertion is pure timing — it did on Windows, not on macOS.
+          list: async () => listRows,
           listRuntimes: async () => [],
         },
         relay: {
@@ -161,12 +168,13 @@ async function settle(): Promise<void> {
 }
 
 async function warm(sessionPath: string, text: string): Promise<void> {
-  useAppStore.setState({
-    sessionList: [{
-      path: sessionPath, name: 'a', preview: text, sessionId: 'id', piSessionId: 'id',
-      lastModified: 1, messageCount: 1, projectPath: WORKSPACE.path, projectName: WORKSPACE.name,
-    }],
-  })
+  // The main process answers the list from the same session that was just seeded,
+  // so a delayed refresh cannot erase the row the projection needs.
+  listRows = [{
+    path: sessionPath, name: 'a', preview: text, sessionId: 'id', piSessionId: 'id',
+    lastModified: 1, messageCount: 1, projectPath: WORKSPACE.path, projectName: WORKSPACE.name,
+  }]
+  useAppStore.setState({ sessionList: listRows })
   await useAppStore.getState().switchSession(sessionPath, WORKSPACE.path)
   await settle()
   assert.ok(
