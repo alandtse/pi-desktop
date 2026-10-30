@@ -143,8 +143,6 @@ export function Sidebar(): React.JSX.Element {
     if (local.length === 0) return new Set<string>()
     return new Set(local.map((room) => pathGroupKey(room.cwd)))
   }, [remote])
-  const isMeshLive = (session: SessionListItem): boolean =>
-    !!session.projectPath && meshLivePaths.has(pathGroupKey(session.projectPath))
   // Prefer the session rows: they carry a title and are clickable. Fall back to
   // raw rooms so a Pi that has rooms but no session metadata still shows — but
   // never for a room this machine runs, which is already listed as a local row.
@@ -507,17 +505,6 @@ export function Sidebar(): React.JSX.Element {
                   })}
                 />
               )}
-              {/* This session runs here and is also reachable from the user's other
-                  machines. It stays a local row — it is this machine's session — so
-                  the badge only says it can be driven from elsewhere; it never
-                  moves the row into the remote section. */}
-              {!remoteRef && isMeshLive(session) && (
-                <Radio
-                  size={11}
-                  className="shrink-0 text-faint"
-                  aria-label={t('sidebar.sessionRow.meshLiveBadge')}
-                />
-              )}
             </div>
             {/* The title is now the session's name or first message, so the time it
                 displaced moves here. Recent rows are already grouped by workspace,
@@ -588,6 +575,17 @@ export function Sidebar(): React.JSX.Element {
           <span className="min-w-0 flex-1 truncate text-xs font-medium">
             {group.projectName}
           </span>
+          {/* A folder has one room, so this is the precision the relay can
+              support: it says a Pi is live in this folder on this machine, not
+              which of several sessions in it is the live one. Marking the folder
+              avoids claiming the wrong session row. */}
+          {meshLivePaths.has(pathGroupKey(group.projectPath)) && (
+            <Radio
+              size={11}
+              className="shrink-0 text-faint"
+              aria-label={t('sidebar.sessionRow.meshLiveBadge')}
+            />
+          )}
           <span className="shrink-0 text-[10px] text-faint">
             {count}
           </span>
