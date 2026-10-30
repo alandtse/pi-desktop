@@ -4446,6 +4446,12 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
             (runtime) => runtime.workspaceId === workspace.id && runtime.active
           )?.sessionPath ?? null
         : newestSessionPathFor(get().sessionList, workspace.path)
+      // The runtime this project would hydrate, from the same snapshot.
+      const projectedRuntimeId = live
+        ? Object.values(get().sessionRuntimes).find(
+            (runtime) => runtime.workspaceId === workspace.id && runtime.active
+          )?.runtimeId ?? null
+        : null
       set((state) => ({
         workspaces: state.workspaces.some((item) => item.id === workspace.id)
           ? state.workspaces.map((item) => item.id === workspace.id ? workspace : item)
@@ -4464,6 +4470,15 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
         // belonged to this one.
         activeRemoteRef: null,
         remoteHistory: null,
+        // The runtime and the pending target belong to the project being left.
+        // `reloadActiveSession` below reads both: a stale `activeSessionRuntimeId`
+        // made it hydrate whichever runtime the PREVIOUS project owned, and the
+        // cache lookup keyed off `switchingToSessionFile ?? sessionState` found
+        // nothing because the switch had just nulled `sessionState` — so a
+        // project cycled back to refetched history it was already holding, with
+        // the chat sitting on a spinner for the whole round trip.
+        activeSessionRuntimeId: projectedRuntimeId,
+        switchingToSessionFile: projectedSessionPath,
         piStatus: live ? 'running' : 'stopped',
         piPid: null,
         piError: null,
