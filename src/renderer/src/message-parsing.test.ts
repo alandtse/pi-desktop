@@ -173,3 +173,31 @@ test('an extension message keeps the payload it attached', () => {
   })
   assert.equal(bare?.customDetails, undefined)
 })
+
+test('a live extension message parses even though its shape differs from the record', () => {
+  // The two shapes, straight from pi: `agent-session.js` sendCustomMessage builds
+  // the live one, session-manager.js appendCustomMessageEntry writes the saved one.
+  const live = {
+    role: 'custom',
+    customType: 'remote-pi:pair-code',
+    content: '📱 Scan to pair:\n\n█▀▄\n▀▄█',
+    display: true,
+    details: { uri: 'remotepi://pair?t=abc&epk=def', expiresAt: 1792216070980 },
+    timestamp: Date.now(),
+  }
+  const saved = { ...live, role: undefined, type: 'custom_message', id: 'e1' }
+
+  for (const record of [live, saved]) {
+    const parsed = parseAgentMessage(record)
+    assert.ok(parsed, 'the extension message must not be dropped')
+    assert.equal(parsed.role, 'system')
+    assert.ok(parsed.content.includes('Scan to pair'))
+  }
+
+  // The payload rides along, so a panel can show the expiry instead of a code
+  // that looks live forever.
+  assert.equal(parseAgentMessage(live)?.customDetails?.expiresAt, 1792216070980)
+
+  // `display: false` is the extension saying "bookkeeping", not "show this".
+  assert.equal(parseAgentMessage({ ...live, display: false }), null)
+})

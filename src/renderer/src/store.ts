@@ -3467,12 +3467,21 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
             })
           }
         }
-        // An extension's message has no `role`, so the user-only branch above
+        // An extension's message has no `role: 'user'`, so the branch above
         // skipped it: `/remote-pi pair` sent its QR and code this way and the
-        // GUI showed nothing until the session was reopened and the record was
-        // parsed from history. Same parser, so both paths agree.
-        const extensionMessage = (startedMessage as { type?: unknown; customType?: unknown } | undefined)
-        if (extensionMessage?.type === 'custom_message' && typeof extensionMessage.customType === 'string') {
+        // GUI showed nothing until the session was reopened.
+        //
+        // The LIVE shape is `{ role: 'custom', customType, … }` — `agent-session.js`
+        // builds it in `sendCustomMessage` — while the SAVED record is
+        // `{ type: 'custom_message', customType, … }`. Checking only the saved
+        // spelling is why the first fix for this did nothing.
+        const extensionMessage = startedMessage as
+          | { type?: unknown; role?: unknown; customType?: unknown }
+          | undefined
+        if (
+          (extensionMessage?.type === 'custom_message' || extensionMessage?.role === 'custom') &&
+          typeof extensionMessage.customType === 'string'
+        ) {
           const parsed = parseAgentMessage(startedMessage)
           if (parsed && parsed.content.trim()) get().addMessage(parsed)
         }

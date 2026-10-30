@@ -170,7 +170,16 @@ export function parseAgentMessage(msg: unknown): DisplayMessage | null {
   // were being dropped and their content never reached the chat panel. The
   // pairing QR code is the visible casualty: `/remote-pi pair` sends it this way,
   // and it is the only way to pair without the phone camera.
-  if (m.type === 'custom_message' && typeof m.customType === 'string') {
+  // Extension-emitted messages arrive in TWO shapes, and only one was handled:
+  //   session file record: { type: 'custom_message', customType, content, … } — no role
+  //   live stream event:   { role: 'custom',          customType, content, … } — no type
+  // `agent-session.js` builds the second one in `sendCustomMessage`, so a live
+  // extension message never matched this check and was dropped until the chat
+  // was reopened. The pairing QR code is the visible casualty: `/remote-pi pair`
+  // sends it this way, and it is the only way to pair without the phone camera.
+  const isCustomMessage =
+    m.type === 'custom_message' || m.role === 'custom'
+  if (isCustomMessage && typeof m.customType === 'string') {
     const content = typeof m.content === 'string' ? m.content : ''
     // `display: false` is the extension saying this record is bookkeeping rather
     // than a message for the user; honouring it keeps relay-state chatter out.
