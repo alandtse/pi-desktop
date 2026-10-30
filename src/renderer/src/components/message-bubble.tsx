@@ -3,12 +3,13 @@ import { useTranslation } from 'react-i18next'
 import { useAppStore, type DisplayMessage } from '../store'
 import { modelDisplayName } from '../../../shared/models-config'
 import { DEFAULT_SETTINGS } from '../../../shared/default-settings'
+import type { ExtensionMessage } from './extension-messages'
 import {
   PAIRING_QR_SIZE,
   PAIRING_URI_SIZE,
-  isPairingBlock,
+  extensionLayout,
   pairingLines,
-} from './pairing-block'
+} from './extension-messages'
 import {
   toolCallLabel,
   toolCallSource,
@@ -1003,28 +1004,28 @@ function StoppedNotice({ className }: { className: string }): React.JSX.Element 
 // ─── System Message ──────────────────────────────────────────────────────────
 
 function SystemMessage({ message }: { message: DisplayMessage }): React.JSX.Element {
-  // Extension messages can carry several lines of preformatted text — the pairing
-  // QR code is the case that matters. Rendering those in the one-line pill
-  // collapses all the whitespace and destroys the code, so block content gets a
-  // left-aligned monospace panel instead.
-  const isBlock = message.content.includes('\n')
-  // A QR is drawn with half-block characters, so every glyph is two rows of
-  // modules and glyphs must stack with NO extra leading. `leading-tight` (1.25)
-  // opened a gap between each pair of rows, breaking the code into stripes no
-  // scanner can read. `leading-none` is what makes the blocks square.
-  const isQr = isPairingBlock(message.content)
-  if (isBlock) {
-    // A pairing block carries prose AND a code: the QR keeps its exact leading
-    // and body size, while the long URI below it wraps instead of scrolling off
-    // the panel. One blanket size forced a choice between a QR too small to scan
-    // and a URI too wide to read.
-    if (isQr) {
-      return (
-        <div className="mb-4 flex justify-center animate-fade-in">
-          <PairingBlock content={message.content} />
-        </div>
-      )
-    }
+  // What this message IS comes from the extension that sent it, not from what its
+  // text looks like: `customType` names the message and `customDetails` carries its
+  // payload. `extensionLayout` is the dispatch — a registered type gets its own
+  // renderer, anything else falls through to the generic block.
+  const extension: ExtensionMessage = {
+    customType: message.customType ?? '',
+    content: message.content,
+    ...(message.customDetails ? { details: message.customDetails } : {}),
+  }
+  const layout = extensionLayout(extension)
+
+  if (layout === 'pairing') {
+    return (
+      <div className="mb-4 flex justify-center animate-fade-in">
+        <PairingBlock message={extension} />
+      </div>
+    )
+  }
+
+  // Any other multi-line body gets a monospace panel: the one-line pill would
+  // collapse its whitespace and destroy preformatted content.
+  if (layout === 'block') {
     return (
       <div className="mb-4 flex justify-center animate-fade-in">
         <pre className="max-w-full overflow-x-auto whitespace-pre rounded-lg bg-surface px-3 py-2 text-left font-mono text-xs leading-tight text-dim">
@@ -1033,7 +1034,6 @@ function SystemMessage({ message }: { message: DisplayMessage }): React.JSX.Elem
       </div>
     )
   }
-
   return (
     <div className="mb-4 flex justify-center animate-fade-in">
       <div className="rounded-full bg-surface px-3 py-1 text-xs text-dim">
@@ -1045,8 +1045,9 @@ function SystemMessage({ message }: { message: DisplayMessage }): React.JSX.Elem
 
 // ─── Pairing Block ───────────────────────────────────────────────────────────
 
-function PairingBlock({ content }: { content: string }): React.JSX.Element {
-  const { text, qr, uri } = pairingLines(content)
+function PairingBlock({ message }: { message: ExtensionMessage }): React.JSX.Element {
+  const { t } = useTranslation()
+  const { text, qr, uri, expiresAt } = pairingLines(message)
   return (
     <div className="flex max-w-full flex-col items-center gap-2 rounded-lg bg-surface px-3 py-2 text-dim">
       {text.map((line, index) => (
@@ -1067,6 +1068,11 @@ function PairingBlock({ content }: { content: string }): React.JSX.Element {
         >
           {uri}
         </code>
+      )}
+      {expiresAt !== null && (
+        <div className="text-center text-xs text-faint">
+          {t('chat.pairing.expiresAt', { time: new Date(expiresAt).toLocaleTimeString() })}
+        </div>
       )}
     </div>
   )

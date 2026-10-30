@@ -195,7 +195,10 @@
       "stopTitle": "停止并插入文本",
       "transcribing": "正在转写你的语音"
     },
-    "waitingForResponse": "正在等待回答…"
+    "waitingForResponse": "正在等待回答…",
+    "pairing": {
+      "expiresAt": "代码有效期至 {{time}}"
+    }
   },
   "commandGroups": {
     "commands": "命令",

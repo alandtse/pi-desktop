@@ -219,7 +219,10 @@
       "stopTitle": "Зупинити й вставити текст",
       "transcribing": "Розпізнавання мовлення"
     },
-    "waitingForResponse": "Очікування відповіді…"
+    "waitingForResponse": "Очікування відповіді…",
+    "pairing": {
+      "expiresAt": "Код дійсний до {{time}}"
+    }
   },
   "commandGroups": {
     "commands": "Команди",

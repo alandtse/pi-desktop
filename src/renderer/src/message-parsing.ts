@@ -31,6 +31,12 @@ export interface DisplayMessage {
   thinking?: string
   /** Keep reasoning that was visible during streaming open on its first render. */
   initiallyShowThinking?: boolean
+  /**
+   * The extension identifier that emitted this message (`remote-pi:pair-code`).
+   * This is the DISCRIMINATOR for how to render an extension message — the
+   * renderer dispatches on it rather than on what the text happens to look like.
+   */
+  customType?: string
   /** Structured payload an extension attached (the pairing code's uri/expiry). */
   customDetails?: Record<string, unknown>
   model?: string
@@ -189,6 +195,10 @@ export function parseAgentMessage(msg: unknown): DisplayMessage | null {
       role: 'system',
       content,
       timestamp: parseTimestamp(m.timestamp),
+      // The identifier and payload both ride along: the renderer dispatches on
+      // `customType` and reads `details`, so it never has to guess a message's
+      // kind from its appearance.
+      customType: m.customType,
       // Keep the structured payload. The pairing code sends `uri` (the same
       // `remotepi://pair?...` the text carries) plus `expiresAt`, so the panel can
       // say when a code dies instead of leaving a stale one looking live.

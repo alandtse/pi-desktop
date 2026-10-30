@@ -203,7 +203,10 @@
       "stopTitle": "Stop and insert text",
       "transcribing": "Transcribing your voice"
     },
-    "waitingForResponse": "Waiting for response..."
+    "waitingForResponse": "Waiting for response...",
+    "pairing": {
+      "expiresAt": "Code valid until {{time}}"
+    }
   },
   "commandGroups": {
     "commands": "Commands",
