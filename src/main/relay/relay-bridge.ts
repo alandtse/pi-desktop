@@ -17,6 +17,7 @@ import type {
   WireModel,
 } from '../../shared/relay-protocol'
 import { appLog } from '../app-log'
+import { localRoomsCached } from './local-rooms'
 import type { RelayKeypair } from './identity'
 import type { RelayManagerState } from './relay-session-manager'
 
@@ -119,14 +120,42 @@ export class RelaySessionBridge {
     return {
       settings: settings.relay,
       connection: manager
-        ? manager.getState()
+        ? await this.withLocalRooms(manager.getState())
         : {
             status: 'idle',
             rooms: [],
             roomsByPeer: {},
             agent: settings.relay.pairedAgent,
             agents: settings.relay.pairedAgents,
+            localRooms: [],
           },
+    }
+  }
+
+  /**
+   * Stamps which advertised rooms this machine is actually running.
+   *
+   * Applied to every status the renderer sees — pushes as well as requests — so
+   * the sidebar can tell a session of its own that is live over the mesh from a
+   * session on another machine, and never has to guess from a machine name. The
+   * peer travels with each entry because the renderer needs it to attach to the
+   * already-running Pi rather than start a competing one.
+   */
+  private async withLocalRooms(
+    state: RelayManagerState,
+  ): Promise<RelayManagerState & { localRooms: RelayStatus['connection']['localRooms'] }> {
+    const local = await localRoomsCached(state.rooms.map((room) => room.room_id)).catch(
+      () => new Set<string>(),
+    )
+    return {
+      ...state,
+      localRooms: state.rooms
+        .filter((room) => local.has(room.room_id))
+        .map((room) => ({
+          roomId: room.room_id,
+          peer: room.peer ?? state.agent?.pubkey ?? '',
+          cwd: room.cwd,
+        })),
     }
   }
 
@@ -243,7 +272,14 @@ export class RelaySessionBridge {
       appLog.info('relay', 'No remote sessions listed', String(error))
       return []
     })
-    return rooms.map((room) => toRemoteSessionRow(room, agent))
+    // The relay speaks for every paired Pi, so a machine paired with itself is
+    // told about its own live sessions. Those must not become remote rows: the
+    // same session already has a local row on disk, and showing both would list
+    // one session twice, the second time as if it lived elsewhere.
+    const local = await localRoomsCached(rooms.map((room) => room.room_id))
+    return rooms
+      .filter((room) => !local.has(room.room_id))
+      .map((room) => toRemoteSessionRow(room, agent))
   }
 
   /**
@@ -366,9 +402,11 @@ export class RelaySessionBridge {
     // roster push or a room adoption never reaches the panel.
     this.unsubscribeManager?.()
     this.unsubscribeManager = manager.onChange((state) => {
-      for (const listener of this.listeners) {
-        void this.getStatus().then((status) => listener({ ...status, connection: state }))
-      }
+      void this.withLocalRooms(state).then((connection) => {
+        void this.getStatus().then((status) => {
+          for (const listener of this.listeners) listener({ ...status, connection })
+        })
+      })
     })
     // Live frames are what make a remote session behave like a local one: without
     // this the transcript would only ever be a snapshot from the last sync.

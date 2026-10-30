@@ -3,11 +3,45 @@ import { test } from 'node:test'
 import { DEFAULT_SETTINGS } from '../../shared/default-settings'
 import type { AppSettings, PairedRelayAgent, RelaySettings, RelayStatus } from '../../shared/ipc-contracts'
 import type { RelayRoomInfo } from '../../shared/relay-protocol'
+import { createServer, type Server } from 'node:net'
+import { mkdirSync, mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { RelaySessionBridge, type RelayManagerLike } from './relay-bridge'
+import { resetLocalRoomsCache } from './local-rooms'
 import type { RelayManagerState } from './relay-session-manager'
 
 const AGENT: PairedRelayAgent = { pubkey: 'nJvBiqtqL1vZZNa0WpBynaj7EeNfq/g5fauzA516IcM=', agentName: 'macbook', roomId: 'room-abc', pairedAt: '2026-10-18T00:00:00.000Z' }
 const ROOM: RelayRoomInfo = { cwd: '/Users/a/project', name: 'project', room_id: 'abc' }
+
+/**
+ * A room id that is genuinely live on this machine.
+ *
+ * Locality is decided by connecting to the cwd lock socket, so a fake cannot
+ * stand in for it: the test binds a real socket in a temp REMOTE_PI_HOME and
+ * lets the probe find it. That is the same signal production relies on.
+ */
+const LOCAL_ROOM_ID = 'LocalRoom001'
+
+function holdLocalLock(roomId: string): { release: () => Promise<void> } {
+  const home = mkdtempSync(join(tmpdir(), 'pi-locks-'))
+  const dir = join(home, '.pi', 'remote', 'locks')
+  mkdirSync(dir, { recursive: true })
+  const server: Server = createServer()
+  server.listen(join(dir, `${roomId}.sock`))
+  const previous = process.env['REMOTE_PI_HOME']
+  process.env['REMOTE_PI_HOME'] = home
+  resetLocalRoomsCache()
+  return {
+    release: async () => {
+      await new Promise<void>((resolve) => server.close(() => resolve()))
+      if (previous === undefined) delete process.env['REMOTE_PI_HOME']
+      else process.env['REMOTE_PI_HOME'] = previous
+      resetLocalRoomsCache()
+      rmSync(home, { recursive: true, force: true })
+    },
+  }
+}
 
 class FakeManager implements RelayManagerLike {
   connected = false
@@ -343,4 +377,66 @@ test('a remote session row is named after its own session, not the folder', asyn
   assert.deepEqual(rows.map((row) => row.ref.roomId), ['abc', 'def'])
   // Two rooms in one folder must still be two rows, not one collapsed entry.
   assert.equal(new Set(rows.map((row) => row.session.path)).size, 2)
+})
+
+test('a room this machine is running never becomes a remote row', async () => {
+  // A machine paired with itself is told about its own live sessions. The same
+  // session already has a local row from disk, so listing it again as another
+  // machine's would show one session twice.
+  const lock = holdLocalLock(LOCAL_ROOM_ID)
+  try {
+  const subject = harness({ relay: { enabled: true, url: 'http://a:3000', pairedAgent: AGENT } })
+  await subject.bridge.start()
+  const localRoom: RelayRoomInfo = {
+    cwd: '/Users/a/local-project',
+    name: 'local',
+    room_id: LOCAL_ROOM_ID,
+    peer: AGENT.pubkey,
+  }
+  subject.managers[0]!.emitChange({
+    status: 'paired',
+    agent: AGENT,
+    rooms: [ROOM, localRoom],
+  })
+
+  const rows = await subject.bridge.sessions()
+
+  assert.deepEqual(rows.map((row) => row.ref.roomId), ['abc'])
+  } finally {
+    await lock.release()
+  }
+})
+
+test('the local rooms are reported on status so the row can show it is mesh-reachable', async () => {
+  const lock = holdLocalLock(LOCAL_ROOM_ID)
+  try {
+  const subject = harness({ relay: { enabled: true, url: 'http://a:3000', pairedAgent: AGENT } })
+  await subject.bridge.start()
+  const localRoom: RelayRoomInfo = {
+    cwd: '/Users/a/local-project',
+    name: 'local',
+    room_id: LOCAL_ROOM_ID,
+    peer: AGENT.pubkey,
+  }
+  subject.managers[0]!.emitChange({ status: 'paired', agent: AGENT, rooms: [ROOM, localRoom] })
+
+  const status = await subject.bridge.getStatus()
+
+  // The peer travels with the room: attaching to the running Pi needs both, and
+  // starting a second writer on the same session file must stay avoidable.
+  assert.deepEqual(status.connection.localRooms, [
+    { roomId: LOCAL_ROOM_ID, peer: AGENT.pubkey, cwd: '/Users/a/local-project' },
+  ])
+  } finally {
+    await lock.release()
+  }
+})
+
+test('an unreachable relay reports no local rooms rather than guessing', async () => {
+  const subject = harness({ relay: { enabled: true, url: 'http://a:3000', pairedAgent: AGENT } })
+  // Never connected: the status must still be well formed, because the sidebar
+  // reads `localRooms` unconditionally.
+  const status = await subject.bridge.getStatus()
+
+  assert.deepEqual(status.connection.localRooms, [])
 })

@@ -1549,6 +1549,18 @@ export interface RelayStatus {
     detail?: string
     rooms: import('./relay-protocol').RelayRoomInfo[]
     agent: PairedRelayAgent | null
+    /**
+     * Rooms in `rooms` that are running on THIS machine, with the peer they belong
+     * to.
+     *
+     * The relay speaks for every paired Pi, so a machine paired with itself is
+     * told about its own live sessions. Those must not render as another
+     * machine's sessions — the same session already has a local row on disk.
+     * Carrying the peer as well as the room id is what lets the renderer attach to
+     * the Pi that is ALREADY running instead of starting a second one on the same
+     * session file.
+     */
+    localRooms: Array<{ roomId: string; peer: string; cwd: string }>
   }
 }
 
