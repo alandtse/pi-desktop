@@ -1581,6 +1581,7 @@
     "sessionNamePlaceholder": "会话名称",
     "sessionRow": {
       "remoteBadge": "{{host}} 上的会话",
+      "meshLiveBadge": "此机器上的会话，可从其他已配对机器访问",
       "tooltipActive": "{{title}}\n\n点击打开 · 双击重命名 · 右键查看操作",
       "tooltipInactive": "{{title}}\n\n点击打开 · 右键查看操作"
     },

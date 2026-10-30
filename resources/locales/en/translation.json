@@ -1612,6 +1612,7 @@
     "sessionNamePlaceholder": "Session name",
     "sessionRow": {
       "remoteBadge": "Session on {{host}}",
+      "meshLiveBadge": "Session on this machine, reachable from other paired machines",
       "tooltipActive": "{{title}}\n\nClick to open · double-click to rename · right-click for actions",
       "tooltipInactive": "{{title}}\n\nClick to open · right-click for actions"
     },

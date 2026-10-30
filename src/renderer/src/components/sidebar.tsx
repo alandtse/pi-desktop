@@ -27,6 +27,7 @@ import {
   Pencil,
   Workflow as WorkflowIcon,
   Laptop,
+  Radio,
 } from 'lucide-react'
 import { useMemo, useState, useRef, useEffect } from 'react'
 import { StatusPopover } from './status-popover'
@@ -128,8 +129,29 @@ export function Sidebar(): React.JSX.Element {
   // end; both should render nothing rather than an empty section that looks
   // broken.
   const remoteRooms = remote?.connection.rooms ?? []
+  /**
+   * Folders where a Pi is running on THIS machine and is reachable over the mesh.
+   *
+   * Those sessions already have an ordinary local row from disk, so they must
+   * not also appear as another machine's session — the relay simply cannot tell
+   * one machine from another, and a self-pairing makes it echo our own rooms
+   * back. What the mesh adds here is only a fact worth showing: this session is
+   * driveable from the user's other machines.
+   */
+  const meshLivePaths = useMemo(() => {
+    const local = remote?.connection.localRooms ?? []
+    if (local.length === 0) return new Set<string>()
+    return new Set(local.map((room) => pathGroupKey(room.cwd)))
+  }, [remote])
+  const isMeshLive = (session: SessionListItem): boolean =>
+    !!session.projectPath && meshLivePaths.has(pathGroupKey(session.projectPath))
   // Prefer the session rows: they carry a title and are clickable. Fall back to
-  // raw rooms so a Pi that has rooms but no session metadata still shows.
+  // raw rooms so a Pi that has rooms but no session metadata still shows — but
+  // never for a room this machine runs, which is already listed as a local row.
+  const localRoomIds = useMemo(
+    () => new Set((remote?.connection.localRooms ?? []).map((room) => room.roomId)),
+    [remote],
+  )
   const remoteEntries: Array<{ key: string; label: string; title: string; roomId: string; ref?: RemoteSessionRef }> =
     remoteSessions.length > 0
       ? remoteSessions.map(({ session, ref }) => ({
@@ -139,12 +161,14 @@ export function Sidebar(): React.JSX.Element {
           roomId: ref.roomId,
           ref,
         }))
-      : remoteRooms.map((room) => ({
-          key: room.room_id,
-          label: room.name,
-          title: room.cwd,
-          roomId: room.room_id,
-        }))
+      : remoteRooms
+          .filter((room) => !localRoomIds.has(room.room_id))
+          .map((room) => ({
+            key: room.room_id,
+            label: room.name,
+            title: room.cwd,
+            roomId: room.room_id,
+          }))
 
   // The live width during a drag. Kept local so dragging never writes
   // settings.json; the draft outlives the drag so the row does not jump while the
@@ -481,6 +505,17 @@ export function Sidebar(): React.JSX.Element {
                       peer: remoteRef.peer,
                     }),
                   })}
+                />
+              )}
+              {/* This session runs here and is also reachable from the user's other
+                  machines. It stays a local row — it is this machine's session — so
+                  the badge only says it can be driven from elsewhere; it never
+                  moves the row into the remote section. */}
+              {!remoteRef && isMeshLive(session) && (
+                <Radio
+                  size={11}
+                  className="shrink-0 text-faint"
+                  aria-label={t('sidebar.sessionRow.meshLiveBadge')}
                 />
               )}
             </div>

@@ -1674,6 +1674,7 @@
     "sessionNamePlaceholder": "Назва сесії",
     "sessionRow": {
       "remoteBadge": "Сеанс на {{host}}",
+      "meshLiveBadge": "Сесія на цій машині, доступна з інших спарених машин",
       "tooltipActive": "{{title}}\n\nКлацання — відкрити · подвійне — перейменувати · правою кнопкою — дії",
       "tooltipInactive": "{{title}}\n\nКлацання — відкрити · правою кнопкою — дії"
     },
