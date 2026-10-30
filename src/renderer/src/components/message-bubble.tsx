@@ -996,16 +996,29 @@ function StoppedNotice({ className }: { className: string }): React.JSX.Element 
 
 // ─── System Message ──────────────────────────────────────────────────────────
 
+// Half-block glyphs are how a QR is drawn in text. Detecting them lets the one
+// message type that needs exact leading ask for it.
+const QR_BLOCK_CHARS = /[\u2580\u2584\u2588]/
+
 function SystemMessage({ message }: { message: DisplayMessage }): React.JSX.Element {
   // Extension messages can carry several lines of preformatted text — the pairing
   // QR code is the case that matters. Rendering those in the one-line pill
   // collapses all the whitespace and destroys the code, so block content gets a
   // left-aligned monospace panel instead.
   const isBlock = message.content.includes('\n')
+  // A QR is drawn with half-block characters, so every glyph is two rows of
+  // modules and glyphs must stack with NO extra leading. `leading-tight` (1.25)
+  // opened a gap between each pair of rows, breaking the code into stripes no
+  // scanner can read. `leading-none` is what makes the blocks square.
+  const isQr = QR_BLOCK_CHARS.test(message.content)
   if (isBlock) {
     return (
       <div className="mb-4 flex justify-center animate-fade-in">
-        <pre className="max-w-full overflow-x-auto whitespace-pre rounded-lg bg-surface px-3 py-2 text-left font-mono text-xs leading-tight text-dim">
+        <pre
+          className={`max-w-full overflow-x-auto whitespace-pre rounded-lg bg-surface px-3 py-2 text-left font-mono text-dim ${
+            isQr ? 'text-[6px] leading-none tracking-normal' : 'text-xs leading-tight'
+          }`}
+        >
           {message.content}
         </pre>
       </div>

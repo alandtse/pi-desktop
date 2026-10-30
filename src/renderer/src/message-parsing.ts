@@ -9,6 +9,10 @@ export interface DisplayAttachment {
   data: string
 }
 
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
 export interface DisplayMessage {
   id: string
   role: 'user' | 'assistant' | 'toolResult' | 'system'
@@ -27,6 +31,8 @@ export interface DisplayMessage {
   thinking?: string
   /** Keep reasoning that was visible during streaming open on its first render. */
   initiallyShowThinking?: boolean
+  /** Structured payload an extension attached (the pairing code's uri/expiry). */
+  customDetails?: Record<string, unknown>
   model?: string
   provider?: string
   cost?: number
@@ -174,6 +180,10 @@ export function parseAgentMessage(msg: unknown): DisplayMessage | null {
       role: 'system',
       content,
       timestamp: parseTimestamp(m.timestamp),
+      // Keep the structured payload. The pairing code sends `uri` (the same
+      // `remotepi://pair?...` the text carries) plus `expiresAt`, so the panel can
+      // say when a code dies instead of leaving a stale one looking live.
+      ...(isPlainRecord(m.details) ? { customDetails: m.details } : {}),
     }
   }
 

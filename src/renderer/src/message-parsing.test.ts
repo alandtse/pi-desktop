@@ -150,3 +150,26 @@ test('an extension message is rendered live, not only after a reload', () => {
   assert.equal(parseAgentMessage({ ...record, display: false }), null)
   assert.equal(parseAgentMessage({ ...record, content: '   ' }), null)
 })
+
+test('an extension message keeps the payload it attached', () => {
+  // The pairing code sends `uri` plus `expiresAt` alongside the rendered text, so
+  // the panel can say when a code dies rather than leaving a dead one looking
+  // live. Dropping `details` threw that away.
+  const parsed = parseAgentMessage({
+    type: 'custom_message',
+    customType: 'remote-pi:pair-code',
+    display: true,
+    content: 'remotepi://pair?t=abc',
+    details: { uri: 'remotepi://pair?t=abc', expiresAt: 1792216070980, roomId: 'p53MO2xB2bhV' },
+    timestamp: 1,
+  })
+  assert.ok(parsed)
+  assert.equal(parsed!.customDetails?.expiresAt, 1792216070980)
+  assert.equal(parsed!.customDetails?.roomId, 'p53MO2xB2bhV')
+
+  // A record with no details at all stays exactly as it was.
+  const bare = parseAgentMessage({
+    type: 'custom_message', customType: 'x', display: true, content: 'hi', timestamp: 1,
+  })
+  assert.equal(bare?.customDetails, undefined)
+})
