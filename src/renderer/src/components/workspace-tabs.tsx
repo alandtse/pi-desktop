@@ -87,10 +87,18 @@ export function WorkspaceTabs(): React.JSX.Element {
         sessionList,
         relayStatus?.settings.machineNames ?? {},
         relayStatus?.settings.pairedAgents ?? [],
+        relayStatus?.connection.ownPeer ?? null,
       ),
     // pairedAgents belongs here: pairing a machine with no sessions yet must add
-    // its tab, and that list changes without sessionList changing.
-    [sessionList, relayStatus?.settings.machineNames, relayStatus?.settings.pairedAgents],
+    // its tab, and that list changes without sessionList changing. ownPeer does
+    // too: it arrives with the first status, and without it in the deps a
+    // self-pairing would keep its stale "This Mac" tab after the key is known.
+    [
+      sessionList,
+      relayStatus?.settings.machineNames,
+      relayStatus?.settings.pairedAgents,
+      relayStatus?.connection.ownPeer,
+    ],
   )
   const activeRemoteProjectId = useMemo(() => {
     if (!activeRemoteRef) return null

@@ -50,6 +50,11 @@ export function remoteProjectTabs(
   // its tab. Without this a machine vanishes from the strip the moment it closes
   // its last session, which reads as an unpairing.
   pairedAgents: readonly { pubkey: string; machineName?: string }[] = [],
+  // This machine's own Pi key when known. A pairing carrying it is this machine
+  // paired with itself: those sessions are local ones, listed as local projects,
+  // so seeding a machine tab for it would be a "This Mac" tab with no remote
+  // session behind it and a count that can never mean anything.
+  ownPeer: string | null = null,
 ): RemoteProjectTab[] {
   const groups = new Map<string, RemoteProjectTab>()
   const addMachine = (peer: string, machineName?: string): RemoteProjectTab => {
@@ -74,7 +79,10 @@ export function remoteProjectTabs(
 
 
 
-  for (const machine of pairedAgents) addMachine(machine.pubkey, machine.machineName)
+  for (const machine of pairedAgents) {
+    if (ownPeer !== null && machine.pubkey === ownPeer) continue
+    addMachine(machine.pubkey, machine.machineName)
+  }
 
   for (const session of sessionList) {
     if (!session.remote) continue

@@ -17,7 +17,7 @@ import type {
   WireModel,
 } from '../../shared/relay-protocol'
 import { appLog } from '../app-log'
-import { localRoomsCached } from './local-rooms'
+import { localRoomsCached, ownPiPubkey } from './local-rooms'
 import type { RelayKeypair } from './identity'
 import type { RelayManagerState } from './relay-session-manager'
 
@@ -128,6 +128,10 @@ export class RelaySessionBridge {
             agent: settings.relay.pairedAgent,
             agents: settings.relay.pairedAgents,
             localRooms: [],
+            // Named separately because the tab strip seeds a tab per PAIRED agent,
+            // not per room: without this a self-pairing shows a machine tab even
+            // when every one of its rooms is filtered out as local.
+            ownPeer: ownPiPubkey(),
           },
     }
   }
@@ -143,12 +147,18 @@ export class RelaySessionBridge {
    */
   private async withLocalRooms(
     state: RelayManagerState,
-  ): Promise<RelayManagerState & { localRooms: RelayStatus['connection']['localRooms'] }> {
+  ): Promise<
+    RelayManagerState & {
+      localRooms: RelayStatus['connection']['localRooms']
+      ownPeer: string | null
+    }
+  > {
     const local = await localRoomsCached(state.rooms.map((room) => room.room_id)).catch(
       () => new Set<string>(),
     )
     return {
       ...state,
+      ownPeer: ownPiPubkey(),
       localRooms: state.rooms
         .filter((room) => local.has(room.room_id))
         .map((room) => ({

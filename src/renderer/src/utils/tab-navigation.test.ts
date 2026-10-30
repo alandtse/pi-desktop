@@ -283,3 +283,20 @@ test('a local chat is not active while a remote chat owns the view', () => {
   assert.equal(isTabActive(local, 'rt-1', null), true)
   assert.equal(isTabActive(remoteRow, 'rt-1', null), false)
 })
+
+test('a self-pairing gets no machine tab, an ordinary pairing still does', () => {
+  const rows = [
+    { session: { path: 'remote://self/aaa', name: 'self', projectPath: '/x' } as never, ref: { peer: 'self', roomId: 'aaa' } },
+  ]
+  const agents = [
+    { pubkey: 'self', machineName: 'This Mac' },
+    { pubkey: 'other', machineName: 'Windows' },
+  ]
+
+  const withOwnPeer = remoteProjectTabs(rows as never, {}, agents, 'self')
+  assert.deepEqual(withOwnPeer.map((tab) => tab.title), ['Windows'])
+
+  // Unknown identity must not drop anything: no guess is made about a pairing.
+  const withoutOwnPeer = remoteProjectTabs(rows as never, {}, agents, null)
+  assert.equal(withoutOwnPeer.length, 2)
+})

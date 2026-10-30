@@ -1561,6 +1561,15 @@ export interface RelayStatus {
      * session file.
      */
     localRooms: Array<{ roomId: string; peer: string; cwd: string }>
+    /**
+     * This machine's own Pi key, when it is known.
+     *
+     * A pairing whose key equals this one is this machine paired with itself: its
+     * sessions are local sessions, so it must not get a machine tab of its own.
+     * Null when the key cannot be read (no keychain, or not macOS), in which case
+     * nothing is assumed and the pairing is treated as another machine.
+     */
+    ownPeer: string | null
   }
 }
 

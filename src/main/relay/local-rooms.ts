@@ -16,9 +16,17 @@
  * A named pipe is used on Windows (`lock-<id>`), where the same connect probe
  * applies; only the address differs.
  */
+import { execFileSync } from 'node:child_process'
 import { connect } from 'node:net'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
+
+/**
+ * Cached answer from `ownPiPubkey`. `undefined` means "not asked yet"; `null`
+ * means asked and unavailable, which is remembered so a locked keychain is not
+ * re-probed on every status push.
+ */
+let cachedOwnPubkey: string | null | undefined
 
 /** How long a probe may take before the room is assumed to live elsewhere. */
 const PROBE_TIMEOUT_MS = 400
@@ -104,6 +112,7 @@ const cache = new Map<string, { local: boolean; at: number }>()
  */
 export function resetLocalRoomsCache(): void {
   cache.clear()
+  cachedOwnPubkey = undefined
 }
 
 export async function localRoomsCached(roomIds: readonly string[]): Promise<Set<string>> {
@@ -118,4 +127,39 @@ export async function localRoomsCached(roomIds: readonly string[]): Promise<Set<
     for (const id of stale) cache.set(id, { local: fresh.has(id), at: now })
   }
   return new Set(unique.filter((id) => cache.get(id)?.local))
+}
+
+/**
+ * This machine's own Pi key, when it can be read without prompting.
+ *
+ * `remote-pi` stores one Ed25519 identity per machine in the login keychain and
+ * writes no copy to disk, so the keychain is the only source. A pairing is
+ * self-pairing exactly when the paired Pi's key equals this one, and without it
+ * the desktop would have to guess from a machine name — which is a label the user
+ * types, not an identity.
+ *
+ * Returns null rather than throwing: a locked keychain, a headless run, or any
+ * other failure must degrade to "unknown", never break the relay.
+ */
+export function ownPiPubkey(): string | null {
+  if (cachedOwnPubkey !== undefined) return cachedOwnPubkey
+  // The keychain is a macOS facility; elsewhere there is no non-prompting source,
+  // so the answer is simply unknown and locality falls back to the lock probe.
+  if (process.platform !== 'darwin') {
+    cachedOwnPubkey = null
+    return null
+  }
+  try {
+    const raw = execFileSync(
+      'security',
+      ['find-generic-password', '-s', 'dev.remotepi.pi', '-a', 'longterm-ed25519', '-w'],
+      { encoding: 'utf8', timeout: 1500, stdio: ['ignore', 'pipe', 'ignore'], windowsHide: true },
+    )
+    const parsed: unknown = JSON.parse(raw)
+    const pk = typeof parsed === 'object' && parsed !== null ? (parsed as { pk?: unknown }).pk : null
+    cachedOwnPubkey = typeof pk === 'string' && pk.length > 0 ? pk : null
+  } catch {
+    cachedOwnPubkey = null
+  }
+  return cachedOwnPubkey
 }

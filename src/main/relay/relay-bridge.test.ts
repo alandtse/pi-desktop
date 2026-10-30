@@ -440,3 +440,21 @@ test('an unreachable relay reports no local rooms rather than guessing', async (
 
   assert.deepEqual(status.connection.localRooms, [])
 })
+
+test('the pairing that is this machine itself is named so its tab can be dropped', async () => {
+  // The tab strip seeds a tab per PAIRED agent, not per room, so a self-pairing
+  // would keep a "This Mac" tab even after its rooms were filtered as local.
+  // Main is where the key is readable, so main has to say which pairing it is.
+  const subject = harness({ relay: { enabled: true, url: 'http://a:3000', pairedAgent: AGENT } })
+  await subject.bridge.start()
+
+  const status = await subject.bridge.getStatus()
+
+  // Whatever the machine's own key is, the field is populated exactly once and
+  // never throws when unreadable — the tab strip depends on it being present.
+  assert.ok('ownPeer' in status.connection)
+  assert.ok(
+    status.connection.ownPeer === null || typeof status.connection.ownPeer === 'string',
+    'ownPeer must be a key or null',
+  )
+})
