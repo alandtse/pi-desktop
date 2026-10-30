@@ -7,6 +7,7 @@ import {
   pairingExpiresAt,
   pairingLines,
   pairingUri,
+  readMeshMessage,
 } from './extension-messages'
 
 // remote-pi draws its QR with half-block glyphs, 43 characters wide and 22 rows
@@ -89,4 +90,49 @@ test('the QR is sized to be scanned and the long code to be read', () => {
   // The URI is 114 characters, so on one line at 14px it would need ~958px and
   // would scroll sideways off its own panel. It wraps at the supporting size.
   assert.equal(PAIRING_URI_SIZE, 'text-xs')
+})
+
+test('a mesh message is labelled with who sent it', () => {
+  // remote-pi writes this header itself (dist/index.js:3719), so the sender is read
+  // from its text rather than assumed.
+  // Paths are written twice-escaped because remote-pi sends a Windows path in the
+  // header and a single backslash in a JS string literal would be eaten as an escape.
+  const fromAddress = 'E:\\Documents\\source\\repos\\open-shaders@open-shaders'
+  const message = {
+    customType: 'remote-pi:mesh-message',
+    content: [
+      `[agent-network] message from "${fromAddress}" (id=01a18b75-5919, re=01a18b7a-abcd):`,
+      'Body line one.',
+      '',
+      'Body line two.',
+      '',
+      '(This is a reply to a previous message of yours.)',
+    ].join('\n'),
+  }
+
+  assert.equal(extensionLayout(message), 'mesh', 'it gets its own panel, not a generic block')
+
+  const read = readMeshMessage(message)
+  assert.equal(read.from, fromAddress)
+  assert.equal(read.id, '01a18b75-5919')
+  assert.equal(read.re, '01a18b7a-abcd')
+  assert.equal(read.body.includes('Body line one.'), true, 'the body survives the header strip')
+})
+
+test('a mesh header without an id still names the sender', () => {
+  const read = readMeshMessage({
+    customType: 'remote-pi:mesh-message',
+    content: '[agent-network] message from "desktop#3":\nhello',
+  })
+  assert.equal(read.from, 'desktop#3')
+  assert.equal(read.id, null)
+  assert.equal(read.re, null)
+})
+
+test('unparseable content still shows the whole message', () => {
+  // Better an unlabelled body than an empty panel: an older or newer remote-pi may
+  // write a header this does not recognise.
+  const read = readMeshMessage({ customType: 'remote-pi:mesh-message', content: 'just some text' })
+  assert.equal(read.from, '')
+  assert.equal(read.body, 'just some text')
 })

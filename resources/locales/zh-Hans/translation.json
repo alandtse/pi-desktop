@@ -204,6 +204,10 @@
       "toggle": "显示或隐藏任务列表",
       "remaining": "剩余 {{count}} / {{total}}",
       "allDone": "已完成 {{count}}"
+    },
+    "mesh": {
+      "from": "来自 {{from}}",
+      "unknownSender": "来自未命名对端"
     }
   },
   "commandGroups": {

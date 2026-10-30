@@ -29,7 +29,7 @@ export interface ExtensionMessage {
 }
 
 /** A registered renderer. `null` means "I know this type and it needs no panel". */
-export type ExtensionRenderer = (message: ExtensionMessage) => 'pairing' | null
+export type ExtensionRenderer = (message: ExtensionMessage) => 'pairing' | 'mesh' | null
 
 /**
  * Registered `customType`s.
@@ -38,16 +38,24 @@ export type ExtensionRenderer = (message: ExtensionMessage) => 'pairing' | null
  * layout the generic block cannot give it. Everything else should not be listed —
  * the fallback is not a penalty, it is the correct default.
  */
-const RENDERERS: ReadonlyMap<string, ExtensionRenderer> = new Map([
+const RENDERERS: ReadonlyMap<string, ExtensionRenderer> = new Map<string, ExtensionRenderer>([
   // remote-pi's pairing flow (`pi.sendMessage({ customType: 'remote-pi:pair-code',
   // content: <QR + uri>, details: { uri, token, expiresAt, roomId, name } })`).
   // Its QR is 43 characters wide and its URI 114, so the two need different sizes;
   // no single `<pre>` setting can serve both.
   ['remote-pi:pair-code', () => 'pairing'],
+  // remote-pi delivers an inbound agent-network message as a persisted custom message
+  // (`_meshMessageForAgent`, dist/index.js:3719) whose header names the sender:
+  //   [agent-network] message from "<address>" (id=..., re=...):
+  // The same message is ALSO broadcast live as a `tool_request` with tool
+  // `agent-network`. Both used to land wherever the window was pointed without saying
+  // who sent them; the header is the sender, and it is all either shape carries — the
+  // wire envelope has no recipient field, so naming an addressee would be inventing one.
+  ['remote-pi:mesh-message', () => 'mesh'],
 ])
 
 /** The layout a message should use. */
-export type ExtensionLayout = 'pairing' | 'block' | 'inline'
+export type ExtensionLayout = 'pairing' | 'mesh' | 'block' | 'inline'
 
 /**
  * Decide a message's layout from the extension's declaration.
@@ -130,3 +138,32 @@ export const PAIRING_QR_SIZE = 'text-sm'
  * usable.
  */
 export const PAIRING_URI_SIZE = 'text-xs'
+
+/** Who a mesh message came FROM. The wire carries no recipient, so that is all we can say. */
+export interface MeshMessage {
+  from: string
+  body: string
+  id: string | null
+  re: string | null
+}
+
+/**
+ * Read a mesh message out of remote-pi's own header line.
+ *
+ * The header is the only place the sender appears in the persisted message, and it is
+ * written by remote-pi rather than by us, so the parse is deliberately tolerant: a
+ * header that does not match still yields the whole body with `from` empty, which is
+ * more useful than an unlabelled wall of text.
+ */
+export function readMeshMessage(message: ExtensionMessage): MeshMessage {
+  const lines = message.content.split('\n')
+  const header = /^\[agent-network\] message from "(.*?)"(?: \(id=([^,)]+)(?:, re=([^)]+))?\))?:?$/
+  const match = lines.length > 0 ? header.exec(lines[0].trim()) : null
+  if (!match) return { from: '', body: message.content.trim(), id: null, re: null }
+  return {
+    from: match[1] ?? '',
+    body: lines.slice(1).join('\n').trim(),
+    id: match[2] ?? null,
+    re: match[3] ?? null,
+  }
+}

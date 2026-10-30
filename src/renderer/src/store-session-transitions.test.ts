@@ -3425,3 +3425,55 @@ test('an extension message reaches the live transcript', () => {
   assert.equal(shown.length, 1, 'the extension message is on screen without a reload')
   assert.match(String(shown[0]?.content), /remotepi:\/\/pair\?t=live/)
 })
+
+test('output from another chat never reaches the one on screen', () => {
+  // A turn still streaming in the chat you left used to paint into the chat you opened:
+  // every event looks the same, so without the router's source stamp there is nothing to
+  // compare against. The task list is the cleanest observable — one event, one state
+  // change, no streaming machinery in the way.
+  const entryFor = (subject: string): unknown => ({
+    type: 'entry_appended',
+    entry: {
+      customType: 'rpiv-todo-state',
+      data: { tasks: [{ id: 1, subject, status: 'pending' }], nextId: 2 },
+    },
+  })
+
+  useAppStore.setState({
+    sessionState: resumedSessionState('C:/sessions/a.jsonl'),
+    switchingToSessionFile: null,
+    todoState: null,
+  })
+
+  // Stamped for another chat: dropped before it can touch shared state.
+  useAppStore.getState().handlePiEvent({
+    ...(entryFor('background work') as object),
+    sessionPath: 'C:/sessions/b.jsonl',
+  } as unknown as PiRpcEvent)
+  assert.equal(
+    useAppStore.getState().todoState,
+    null,
+    'the background chat output was dropped instead of applied',
+  )
+
+  // The same event for the chat on screen still lands, so the guard is not blanket.
+  useAppStore.getState().handlePiEvent({
+    ...(entryFor('this chat work') as object),
+    sessionPath: 'C:/sessions/a.jsonl',
+  } as unknown as PiRpcEvent)
+  assert.equal(
+    useAppStore.getState().todoState?.tasks[0]?.subject,
+    'this chat work',
+    'this chat still applies its own events',
+  )
+
+  // And an unstamped event is still accepted: an engine or extension that does not
+  // carry `sessionPath` must not have its output silently discarded.
+  useAppStore.setState({ todoState: null })
+  useAppStore.getState().handlePiEvent(entryFor('unstamped work') as unknown as PiRpcEvent)
+  assert.equal(
+    useAppStore.getState().todoState?.tasks[0]?.subject,
+    'unstamped work',
+    'an event with no source is treated as this chat',
+  )
+})

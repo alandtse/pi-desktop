@@ -3423,6 +3423,21 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
     // BEFORE the remote-session guard below: the todo entries describe this Pi, and
     // a user who switched a tab mid-turn must still find their list when they
     // switch back.
+    // The todo list belongs to a session, so it is only folded when the event is that
+    // session's — a background chat's task list must not replace the one on screen.
+    const eventSession = (event as { sessionPath?: unknown }).sessionPath
+    const onScreenSession = get().sessionState?.sessionFile ?? get().switchingToSessionFile ?? null
+    // Anything produced by another chat is dropped here, at the very top, before it can
+    // touch shared state. `switchingToSessionFile` stands in while a switch is in flight,
+    // so the chat being opened is what admits its own events.
+    if (
+      typeof eventSession === 'string' &&
+      eventSession !== '' &&
+      onScreenSession !== null &&
+      !pathsEqual(eventSession, onScreenSession)
+    ) {
+      return
+    }
     const foldedTodos = foldTodoEvent(get().todoState, event as unknown as TodoSourceEntry)
     if (foldedTodos) set({ todoState: foldedTodos })
     // A remote session on screen is not this Pi. Its turn events describe a

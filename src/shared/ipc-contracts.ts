@@ -933,8 +933,17 @@ export interface PiSubagentProgressEvent {
   payload: unknown
 }
 
-export type PiRpcEvent =
-  | PiAgentStartEvent
+/**
+ * Every event carries the session that produced it.
+ *
+ * Without this the renderer has only the event's type and ids to go on, and those are
+ * identical across chats — so a turn still streaming in the chat you left painted its
+ * output into the one you opened. The router stamps this on the way out; the renderer
+ * drops anything belonging to a chat other than the one on screen.
+ */
+export type SourcedPiRpcEvent = PiRpcEvent & { sessionPath?: string }
+
+export type PiRpcEvent =  | PiAgentStartEvent
   | PiAgentEndEvent
   | PiMessageStartEvent
   | PiMessageUpdateEvent

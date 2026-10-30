@@ -212,6 +212,10 @@
       "toggle": "Show or hide the task list",
       "remaining": "{{count}} left of {{total}}",
       "allDone": "{{count}} done"
+    },
+    "mesh": {
+      "from": "From {{from}}",
+      "unknownSender": "From an unnamed peer"
     }
   },
   "commandGroups": {

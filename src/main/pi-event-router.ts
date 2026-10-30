@@ -2,7 +2,6 @@ import type { PiRpcManager } from './pi-rpc-manager'
 import type { TurnTracker } from './turn-tracker'
 import type {
   PendingPromptCounts,
-  PiAgentEndEvent,
   PiExtensionUiRequest,
   PiProcessStatus,
   PiRpcEvent,
@@ -191,15 +190,22 @@ export function createPiEventRouter(deps: PiEventRouterDeps): PiEventRouter {
   ])
 
   const handleManagerEvent = (manager: PiRpcManager, event: PiRpcEvent): void => {
+    const sessionPath = deps.sessionPathFor?.(manager) ?? null
     // Observed before any routing decision: a background chat's turn boundaries
     // are exactly the ones this must not miss.
-    deps.turnTracker?.observe(event, deps.sessionPathFor?.(manager) ?? null)
+    deps.turnTracker?.observe(event, sessionPath)
     if (isBlockingDialog(event)) {
       handleBlockingDialog(manager, event)
       return
     }
+    // Every event carries the session that produced it. The renderer cannot tell one
+    // chat's stream from another's by looking at the event alone — the same types and
+    // the same ids appear in all of them — so without this it applies whatever arrives
+    // to whichever chat happens to be on screen. That is how a turn still streaming in
+    // the chat you left painted itself over the one you opened.
+    const sourced: PiRpcEvent = sessionPath === null ? event : ({ ...event, sessionPath } as unknown as PiRpcEvent)
     if (manager === deps.getActiveManager()) {
-      deps.broadcastEvent(event)
+      deps.broadcastEvent(sourced)
       return
     }
     if (!FORWARDED_FROM_BACKGROUND.has(event.type)) return
@@ -208,9 +214,7 @@ export function createPiEventRouter(deps: PiEventRouterDeps): PiEventRouter {
     // queue; drop it rather than guess.
     const workspaceId = deps.workspaceIdFor(manager)
     if (workspaceId === null) return
-    // Only agent_end is forwarded, so the cast names that narrowed union.
-    const ended = event as PiAgentEndEvent
-    deps.broadcastEvent({ ...ended, backgroundWorkspaceId: workspaceId })
+    deps.broadcastEvent({ ...sourced, backgroundWorkspaceId: workspaceId } as PiRpcEvent)
   }
 
   /**

@@ -228,6 +228,10 @@
       "toggle": "Показати або сховати список завдань",
       "remaining": "Залишилося {{count}} з {{total}}",
       "allDone": "Готово: {{count}}"
+    },
+    "mesh": {
+      "from": "Від {{from}}",
+      "unknownSender": "Від невідомого вузла"
     }
   },
   "commandGroups": {

@@ -8,6 +8,7 @@ import {
   PAIRING_QR_SIZE,
   PAIRING_URI_SIZE,
   extensionLayout,
+  readMeshMessage,
   pairingLines,
 } from './extension-messages'
 import {
@@ -48,6 +49,7 @@ import {
   ImageOff,
   Square,
   FileText,
+  Network,
 } from 'lucide-react'
 
 function MessageBubbleImpl({
@@ -1015,6 +1017,14 @@ function SystemMessage({ message }: { message: DisplayMessage }): React.JSX.Elem
   }
   const layout = extensionLayout(extension)
 
+  if (layout === 'mesh') {
+    return (
+      <div className="mb-4 flex justify-center animate-fade-in">
+        <MeshBlock message={extension} />
+      </div>
+    )
+  }
+
   if (layout === 'pairing') {
     return (
       <div className="mb-4 flex justify-center animate-fade-in">
@@ -1044,6 +1054,24 @@ function SystemMessage({ message }: { message: DisplayMessage }): React.JSX.Elem
 }
 
 // ─── Pairing Block ───────────────────────────────────────────────────────────
+
+function MeshBlock({ message }: { message: ExtensionMessage }): React.JSX.Element {
+  const { t } = useTranslation()
+  const { from, body, id } = readMeshMessage(message)
+  return (
+    <div className="flex max-w-full flex-col gap-1 rounded-lg border border-border bg-surface px-3 py-2 text-dim">
+      {/* Naming the sender is the point of this panel: an agent-network message arrives
+          from another machine or session, and without a name it reads as if the local
+          agent said it. The wire carries no recipient, so an addressee is not shown. */}
+      <div className="flex items-center gap-1.5 text-xs text-faint">
+        <Network size={11} aria-hidden="true" />
+        <span>{from ? t('chat.mesh.from', { from }) : t('chat.mesh.unknownSender')}</span>
+        {id && <span className="font-mono text-[10px] opacity-60">{id.slice(0, 8)}</span>}
+      </div>
+      <div className="whitespace-pre-wrap text-left text-xs text-primary">{body}</div>
+    </div>
+  )
+}
 
 function PairingBlock({ message }: { message: ExtensionMessage }): React.JSX.Element {
   const { t } = useTranslation()
