@@ -4,6 +4,12 @@ import { useAppStore, type DisplayMessage } from '../store'
 import { modelDisplayName } from '../../../shared/models-config'
 import { DEFAULT_SETTINGS } from '../../../shared/default-settings'
 import {
+  PAIRING_QR_SIZE,
+  PAIRING_URI_SIZE,
+  isPairingBlock,
+  pairingLines,
+} from './pairing-block'
+import {
   toolCallLabel,
   toolCallSource,
   toolCommand,
@@ -996,10 +1002,6 @@ function StoppedNotice({ className }: { className: string }): React.JSX.Element 
 
 // ─── System Message ──────────────────────────────────────────────────────────
 
-// Half-block glyphs are how a QR is drawn in text. Detecting them lets the one
-// message type that needs exact leading ask for it.
-const QR_BLOCK_CHARS = /[\u2580\u2584\u2588]/
-
 function SystemMessage({ message }: { message: DisplayMessage }): React.JSX.Element {
   // Extension messages can carry several lines of preformatted text — the pairing
   // QR code is the case that matters. Rendering those in the one-line pill
@@ -1010,15 +1012,22 @@ function SystemMessage({ message }: { message: DisplayMessage }): React.JSX.Elem
   // modules and glyphs must stack with NO extra leading. `leading-tight` (1.25)
   // opened a gap between each pair of rows, breaking the code into stripes no
   // scanner can read. `leading-none` is what makes the blocks square.
-  const isQr = QR_BLOCK_CHARS.test(message.content)
+  const isQr = isPairingBlock(message.content)
   if (isBlock) {
+    // A pairing block carries prose AND a code: the QR keeps its exact leading
+    // and body size, while the long URI below it wraps instead of scrolling off
+    // the panel. One blanket size forced a choice between a QR too small to scan
+    // and a URI too wide to read.
+    if (isQr) {
+      return (
+        <div className="mb-4 flex justify-center animate-fade-in">
+          <PairingBlock content={message.content} />
+        </div>
+      )
+    }
     return (
       <div className="mb-4 flex justify-center animate-fade-in">
-        <pre
-          className={`max-w-full overflow-x-auto whitespace-pre rounded-lg bg-surface px-3 py-2 text-left font-mono text-dim ${
-            isQr ? 'text-[6px] leading-none tracking-normal' : 'text-xs leading-tight'
-          }`}
-        >
+        <pre className="max-w-full overflow-x-auto whitespace-pre rounded-lg bg-surface px-3 py-2 text-left font-mono text-xs leading-tight text-dim">
           {message.content}
         </pre>
       </div>
@@ -1030,6 +1039,35 @@ function SystemMessage({ message }: { message: DisplayMessage }): React.JSX.Elem
       <div className="rounded-full bg-surface px-3 py-1 text-xs text-dim">
         {message.content}
       </div>
+    </div>
+  )
+}
+
+// ─── Pairing Block ───────────────────────────────────────────────────────────
+
+function PairingBlock({ content }: { content: string }): React.JSX.Element {
+  const { text, qr, uri } = pairingLines(content)
+  return (
+    <div className="flex max-w-full flex-col items-center gap-2 rounded-lg bg-surface px-3 py-2 text-dim">
+      {text.map((line, index) => (
+        <div key={`text-${index}`} className="text-center text-xs">
+          {line}
+        </div>
+      ))}
+      {qr.length > 0 && (
+        <pre
+          className={`overflow-x-auto whitespace-pre text-left font-mono leading-none tracking-normal ${PAIRING_QR_SIZE}`}
+        >
+          {qr.join('\n')}
+        </pre>
+      )}
+      {uri && (
+        <code
+          className={`max-w-full text-center font-mono leading-tight [overflow-wrap:anywhere] ${PAIRING_URI_SIZE}`}
+        >
+          {uri}
+        </code>
+      )}
     </div>
   )
 }

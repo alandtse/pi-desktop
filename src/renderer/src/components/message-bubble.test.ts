@@ -55,3 +55,34 @@ for (const scenario of [
     assert.equal(stopped, scenario.sends)
   })
 }
+
+test('a pairing block sizes the QR for scanning and wraps the long code', async () => {
+  const { PAIRING_QR_SIZE, PAIRING_URI_SIZE, pairingLines } = await import('./pairing-block')
+
+  // Geometry from remote-pi's own renderer: the QR is 43 characters wide and 22
+  // rows tall, each glyph carrying two module rows. The URI is 114 characters.
+  const qrRow = [0x2588, 0x20, 0x2584, 0x2584, 0x2584, 0x2584, 0x2584, 0x20, 0x2588]
+    .map((code) => String.fromCharCode(code))
+    .join('')
+  const content = [
+    'Scan to pair:',
+    '',
+    qrRow,
+    '',
+    'Or copy this pairing code (camera-less devices):',
+    '',
+    'remotepi://pair?t=rbIk5xfuLxvyXlwzqhY6YA&epk=abc&n=desktop&rm=9NsvFIsyNlTH',
+  ].join('\n')
+
+  const parts = pairingLines(content)
+  assert.equal(parts.qr.length, 1, 'every half-block row goes to the code')
+  assert.equal(parts.uri?.startsWith('remotepi://pair?'), true, 'the code is split out of the prose')
+  assert.deepEqual(parts.text, ['Scan to pair:', 'Or copy this pairing code (camera-less devices):'])
+
+  // The QR must be at body size. At 6px it was about 155px wide: present, but a
+  // phone had to be held steady over a patch of tiny dots to catch it.
+  assert.equal(PAIRING_QR_SIZE, 'text-sm', 'the code is set at the body text size, so it can be aimed at')
+  // The URI CANNOT be. At 14px its 114 characters need about 958px on one line
+  // and would scroll sideways off the panel; it wraps at the supporting-text size.
+  assert.equal(PAIRING_URI_SIZE, 'text-xs', 'the long code wraps instead of scrolling away')
+})
