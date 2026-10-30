@@ -290,6 +290,29 @@ function workspaceHasLivePi(
   )
 }
 
+/**
+ * The session a stopped project would resume, taken from the list already on
+ * screen.
+ *
+ * `session.list` is sorted newest-first by mtime and already hides header-only
+ * files, so the first row of the project is the same file main's
+ * `findLatestProjectSession` returns — without a round trip to ask. Used only to
+ * choose which cached transcript to paint; the authoritative answer still comes
+ * from `openLastSession`. A wrong guess costs one extra repaint, never a wrong
+ * session, because `switchSession` re-paints from the real path.
+ *
+ * Remote rows are skipped: their `projectPath` names a folder on another
+ * machine, so a path match here would pick a session this machine does not have.
+ */
+function newestSessionPathFor(sessionList: readonly SessionListItem[], projectPath: string): string | null {
+  for (const item of sessionList) {
+    if (item.remote) continue
+    if (!item.projectPath || !pathsEqual(item.projectPath, projectPath)) continue
+    return item.path
+  }
+  return null
+}
+
 // ─── Store Shape ─────────────────────────────────────────────────────────────
 
 /**
@@ -905,6 +928,18 @@ const transcriptCache = new Map<string, CachedTranscript>()
 // so a path reported with different casing still hits its own entry on Windows.
 const transcriptKey = (sessionPath: string): string => pathGroupKey(sessionPath)
 
+/**
+ * Prefix of the keys under which a remote chat's transcript is retained.
+ *
+ * It is the same string main uses for a remote row's `path`
+ * (`remote://<peer>/<roomId>`), which is what lets a room be pruned against the
+ * roster without a second field to keep in step.
+ */
+const REMOTE_TRANSCRIPT_PREFIX = 'remote://'
+
+/** The cache key for a remote room's transcript; mirrors main's row path. */
+const remoteTranscriptKey = (ref: RemoteSessionRef): string => `${REMOTE_TRANSCRIPT_PREFIX}${ref.peer}/${ref.roomId}`
+
 /** Retained text of one message: bodies, reasoning and tool payloads. */
 function messageChars(message: DisplayMessage): number {
   let chars = message.content.length + (message.thinking?.length ?? 0)
@@ -932,6 +967,56 @@ function cacheTranscript(sessionPath: string, entry: CachedTranscript): void {
 
 function invalidateSessionTranscript(sessionPath: string | null | undefined): void {
   if (sessionPath) transcriptCache.delete(transcriptKey(sessionPath))
+}
+
+/**
+ * The cached transcript for a session, or undefined when it holds nothing worth
+ * painting.
+ *
+ * Read out of the module without disturbing LRU order: a lookup is not a use,
+ * and a session the user merely switched past should not outlive one they read.
+ *
+ * An entry with no messages is treated as absent. Some loads legitimately end
+ * with none (a header-only session), and those entries must not be painted —
+ * they would blank the chat they were meant to fill.
+ */
+function cachedMessagesFor(sessionPath: string | null | undefined): DisplayMessage[] | undefined {
+  if (!sessionPath) return undefined
+  const entry = transcriptCache.get(transcriptKey(sessionPath))
+  if (!entry || entry.messages.length === 0) return undefined
+  return entry.messages
+}
+
+/**
+ * Put a cached transcript on screen before its session is revalidated.
+ *
+ * Every switch path used to repeat this four-line dance inline, and each one
+ * had to remember to guard on the transcript being empty first. Two paths
+ * forgot, so they showed a spinner while holding the very messages they were
+ * waiting for. One helper, one rule: only fill an empty chat, never replace a
+ * transcript the user can already see.
+ *
+ * `sessionPath` is the target being opened — not the session being left, whose
+ * file is already gone from the store by the time most switches ask.
+ *
+ * A remote destination is skipped: its rows carry a placeholder message count
+ * and a ref rather than a real path, so a cache entry under that key could
+ * never be validated anyway.
+ *
+ * Returns whether anything was painted, so a caller that owes the composer a
+ * target can record it only when there is a chat to attribute it to.
+ */
+function paintCachedTranscript(
+  sessionPath: string | null | undefined,
+  remote: RemoteSessionRef | null,
+  set: (partial: Partial<AppState>) => void,
+  messages: DisplayMessage[]
+): boolean {
+  if (remote || messages.length > 0) return false
+  const cached = cachedMessagesFor(sessionPath)
+  if (!cached) return false
+  set({ messages: cached, promptHistory: promptHistoryFrom(cached) })
+  return true
 }
 let sessionStateRequestId = 0
 let historyLoadingRuntime: string | null = null
@@ -1910,14 +1995,12 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
       // session this project resumes, so arriving at a project tab showed a
       // spinner for the whole history load. Paint the conversation we already
       // hold for that session first: switchSession below revalidates it.
-      const cachedEntry = transcriptCache.get(transcriptKey(sessionPath))
-      if (cachedEntry && cachedEntry.messages.length > 0 && get().messages.length === 0) {
-        set({
-          messages: cachedEntry.messages,
-          promptHistory: promptHistoryFrom(cachedEntry.messages),
-          switchingToSessionFile: sessionPath,
-        })
-      }
+      paintCachedTranscript(sessionPath, get().activeRemoteRef, set, get().messages)
+      // switchSession leaves the composer keyed to the chat being LEFT until its
+      // click-coalescing window closes (~40 ms). Record the target as soon as
+      // there is a transcript to attribute to it, so a draft typed during the
+      // wait belongs to the chat being opened.
+      if (get().messages.length > 0) set({ switchingToSessionFile: sessionPath })
       await get().switchSession(sessionPath, workspace.path)
       // After the swap, not inside the lookup promise: `startPi` waits on
       // `pendingLastSessionOpen`, and the continuation's own `sendPrompt` starts
@@ -2593,10 +2676,13 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
         // cache used to be consulted inside reloadActiveSession, which only runs
         // after this round-trip answers — so a cached chat still showed a spinner
         // for the whole bind, and switching felt as slow as a cold load.
-        const cachedEntry = transcriptCache.get(transcriptKey(path))
-        if (cachedEntry && cachedEntry.messages.length > 0) {
-          set({ messages: cachedEntry.messages, promptHistory: promptHistoryFrom(cachedEntry.messages) })
-        }
+        //
+        // `path` is the destination. The cache used to be keyed off
+        // `switchingToSessionFile` here, which `clearMessages()` has already left
+        // alone but `sessionState` no longer backs — a stale key that missed
+        // precisely when the switch targeted a session other than the one on
+        // screen.
+        paintCachedTranscript(path, get().activeRemoteRef, set, get().messages)
         const result = await window.piDesktop.session.switch(path, projectPath) as SessionRuntimeInfo | { success?: boolean; error?: string } | null
         if (gen !== sessionLoadGeneration) return
         if (result && 'success' in result && result.success === false) {
@@ -2989,6 +3075,15 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
       throw error
     }
     const remote = rows.map((row) => row.session)
+    // A room that dropped out of the roster is gone for good — the relay only
+    // lists rooms that are live right now, and a reopened session gets a new
+    // room id. Holding its transcript would pin a chat the user can no longer
+    // reach against the cache budget. Local transcripts are untouched: they are
+    // keyed by file paths and never appear here.
+    const liveRooms = new Set(remote.map((row) => row.path))
+    for (const key of [...transcriptCache.keys()]) {
+      if (key.startsWith(REMOTE_TRANSCRIPT_PREFIX) && !liveRooms.has(key)) transcriptCache.delete(key)
+    }
     set((state) => ({
       sessionList: [...state.sessionList.filter((item) => !item.remote), ...remote],
     }))
@@ -3008,6 +3103,11 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
       activeRemoteRef: ref,
     })
     get().clearMessages()
+    // A remote chat is keyed the way its row is keyed: by the room it came
+    // from. Cycling between two remote tabs went through a full re-sync every
+    // time because nothing was retained for them; the transcript is exactly as
+    // worth keeping as a local one, and the same budget covers both.
+    paintCachedTranscript(remoteTranscriptKey(ref), null, set, get().messages)
     try {
       const result = await window.piDesktop.relay.openSession(ref)
       if (gen !== sessionLoadGeneration) return
@@ -3023,6 +3123,14 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
           timestamp: Date.now(),
         })
       }
+      // Remember what this room looked like so switching back is instant. A
+      // truncated sync is cached too: it is what the Pi was willing to send, and
+      // refetching would only earn the same clamp.
+      cacheTranscript(remoteTranscriptKey(result.ref), {
+        messages: remoteMessages,
+        total: result.events.length,
+        chars: remoteMessages.reduce((sum, message) => sum + messageChars(message), 0),
+      })
       set({
         sessionLoading: false,
         activeRemoteRef: result.ref,
@@ -4324,6 +4432,20 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
       // The status broadcast that follows the main-side activation corrects
       // any snapshot staleness.
       const live = workspaceHasLivePi(get().sessionRuntimes, workspace.id)
+      // Which session this project would resume, read from the snapshot we
+      // already hold. A live runtime names its own session; a stopped project
+      // resumes the newest non-empty file, which is exactly the row the sidebar
+      // showed and whose transcript was cached when it was last opened.
+      //
+      // Read here, before the await below, on purpose: the whole point is to
+      // paint from cache in the same tick as the clear, and `setActive` is a
+      // round trip. If the guess is stale, `openLastSession` re-resolves the
+      // target and paints again with the authoritative path.
+      const projectedSessionPath = live
+        ? Object.values(get().sessionRuntimes).find(
+            (runtime) => runtime.workspaceId === workspace.id && runtime.active
+          )?.sessionPath ?? null
+        : newestSessionPathFor(get().sessionList, workspace.path)
       set((state) => ({
         workspaces: state.workspaces.some((item) => item.id === workspace.id)
           ? state.workspaces.map((item) => item.id === workspace.id ? workspace : item)
@@ -4335,11 +4457,26 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
     todoState: null,
         previewTarget: null,
         editorDirty: false,
+        // Leaving a remote chat ends the relay binding, exactly as switchSession
+        // does. Without it a project tab inherited the pairing: the composer
+        // kept routing prompts to the other machine and `createNewSession`
+        // asked the paired Pi for a new session, while the transcript on screen
+        // belonged to this one.
+        activeRemoteRef: null,
+        remoteHistory: null,
         piStatus: live ? 'running' : 'stopped',
         piPid: null,
         piError: null,
         sessionLoading: live || options?.awaitingSession === true,
       }))
+      // A project tab was showing an empty chat for as long as this round trip.
+      // The transcript is usually already in hand; paint it in the same tick as
+      // the clear so switching back reads as instant instead of as a spinner.
+      //
+      // The binding is cleared above, so no `activeRemoteRef` is passed: this
+      // destination is a local session by definition, and asking for its cache
+      // under a remote guard would suppress the very paint being added here.
+      paintCachedTranscript(projectedSessionPath, null, set, get().messages)
       void window.piDesktop.ui.flushPendingPrompts(workspace.id)
       scheduleSessionListRefresh(get)
       if (!live && options?.awaitingSession !== true) {
@@ -4947,6 +5084,11 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
         if (text) {
           get().addMessage({ id: generateId(), role: 'assistant', content: text, timestamp: Date.now() })
         }
+        // The retained transcript for this room is now one turn short. Dropped
+        // here on the same reasoning as the local `message_end` case: a room
+        // cycled back to must re-sync rather than show a conversation missing
+        // its last answer.
+        if (get().activeRemoteRef) invalidateSessionTranscript(remoteTranscriptKey(get().activeRemoteRef!))
         set({ isStreaming: false, streamingContent: '', streamingThinking: '', streamingToolCalls: new Map() })
         return
       }
