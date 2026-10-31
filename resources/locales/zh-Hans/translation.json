@@ -202,8 +202,8 @@
     "todo": {
       "title": "任务",
       "toggle": "显示或隐藏任务列表",
-      "remaining": "剩余 {{count}} / {{total}}",
-      "allDone": "已完成 {{count}}"
+      "remaining": "剩余 {{n}} / {{total}}",
+      "allDone": "已完成 {{n}}"
     },
     "mesh": {
       "from": "来自 {{from}}",

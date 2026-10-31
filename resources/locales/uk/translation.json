@@ -226,8 +226,8 @@
     "todo": {
       "title": "Завдання",
       "toggle": "Показати або сховати список завдань",
-      "remaining": "Залишилося {{count}} з {{total}}",
-      "allDone": "Готово: {{count}}"
+      "remaining": "Залишилося {{n}} з {{total}}",
+      "allDone": "Готово: {{n}}"
     },
     "mesh": {
       "from": "Від {{from}}",

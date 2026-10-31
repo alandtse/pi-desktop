@@ -50,8 +50,8 @@ export function TodoPanel({ snapshot }: { snapshot: TodoSnapshot | null }): Reac
               that none are left, so the done state is named. */}
           <span className="text-faint">
             {counts.remaining === 0
-              ? t('chat.todo.allDone', { count: counts.total })
-              : t('chat.todo.remaining', { count: counts.remaining, total: counts.total })}
+              ? t('chat.todo.allDone', { n: counts.total })
+              : t('chat.todo.remaining', { n: counts.remaining, total: counts.total })}
           </span>
           {/* The working task is worth naming even collapsed: it is the one line that
               answers "what is it doing right now?" without opening anything. */}

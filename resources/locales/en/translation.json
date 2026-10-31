@@ -210,8 +210,8 @@
     "todo": {
       "title": "Tasks",
       "toggle": "Show or hide the task list",
-      "remaining": "{{count}} left of {{total}}",
-      "allDone": "{{count}} done"
+      "remaining": "{{n}} left of {{total}}",
+      "allDone": "{{n}} done"
     },
     "mesh": {
       "from": "From {{from}}",

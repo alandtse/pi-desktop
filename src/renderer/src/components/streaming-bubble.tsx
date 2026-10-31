@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
-import { MarkdownRenderer } from './markdown-renderer'
+
+import { StreamingMarkdown } from './streaming-markdown'
 import { toolLabel, toolCallLabel, toolCallStatusLabel } from '../message-grouping'
 import { splitClaudeCliMarkers } from '../claude-cli-markers'
 import { mayBeNextStepsCall } from '../next-steps'
@@ -76,7 +77,7 @@ export function StreamingBubble({ content: rawContent, thinking, toolCalls }: St
                 className="max-h-36 min-w-0 overflow-x-hidden overflow-y-auto"
               >
                 <div className="markdown-body min-w-0 font-sans italic text-sm text-muted break-words [overflow-wrap:anywhere]">
-                  <MarkdownRenderer content={thinking} />
+                  <StreamingMarkdown content={thinking} />
                 </div>
               </div>
             </div>
@@ -150,7 +151,7 @@ export function StreamingBubble({ content: rawContent, thinking, toolCalls }: St
             // streaming-md places the caret ::after the last markdown block so it
             // sits at the end of the current chunk (not on a line below it).
             <div className="markdown-body streaming-md min-w-0 text-sm break-words [overflow-wrap:anywhere]">
-              <MarkdownRenderer content={content} />
+              <StreamingMarkdown content={content} />
             </div>
           )}
 
