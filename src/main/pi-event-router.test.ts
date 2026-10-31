@@ -386,3 +386,44 @@ test('attaching the same manager twice does not double-route its events', () => 
   h.managers.get(WS_A)!.emit('event', event)
   assert.deepEqual(h.broadcasts, [event])
 })
+
+test('an expired delivered dialog is released by the counts sweep', () => {
+  // The reported defect in the sibling branch: getPendingCounts reaped expired
+  // QUEUED prompts but counted an expired DELIVERED one forever. Since only flush
+  // deletes a delivered entry, and flush is a recovery path the renderer calls on
+  // mount, a dialog that timed out while the user was away would strand every
+  // prompt queued behind it until the next mount.
+  const h = createHarness([WS_A])
+  const expired = dialogRequest('x1', { timeout: PROMPT_TIMEOUT_MS })
+  const fresh = dialogRequest('x2')
+  h.managers.get(WS_A)!.emit('event', expired)
+  h.managers.get(WS_A)!.emit('event', fresh)
+  h.broadcasts.length = 0
+  h.clock.now = PROMPT_TIMEOUT_MS
+
+  // Reading the counts is the only thing the renderer does on a timer; it must
+  // not merely omit the dead dialog from the figure while keeping the slot.
+  h.router.getPendingCounts()
+
+  assert.deepEqual(
+    h.broadcasts,
+    [fresh],
+    'the released slot must hand over to the prompt queued behind it'
+  )
+  assert.deepEqual(h.router.getPendingCounts(), { [WS_A]: 1 })
+})
+
+test('an expired delivered dialog forgets its origin when released', () => {
+  // If the origin outlived the release, a late answer would be routed to a
+  // manager whose request Pi already resolved.
+  const h = createHarness([WS_A])
+  const expired = dialogRequest('y1', { timeout: PROMPT_TIMEOUT_MS })
+  h.managers.get(WS_A)!.emit('event', expired)
+  h.clock.now = PROMPT_TIMEOUT_MS
+  h.router.getPendingCounts()
+
+  h.router.respond('y1', { confirmed: true })
+
+  assert.equal(h.broadcasts.length, 1, 'no replay of a dialog that already timed out')
+  assert.deepEqual(h.router.getPendingCounts(), {}, 'the dead prompt must not linger in the counts')
+})

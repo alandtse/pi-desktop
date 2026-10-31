@@ -115,6 +115,20 @@ export function createPiEventRouter(deps: PiEventRouterDeps): PiEventRouter {
   }
 
   const getPendingCounts = (): PendingPromptCounts => {
+    // An EXPIRED delivered dialog must be released here, not merely excluded
+    // from the figure. Only flush deletes a delivered entry, and flush is a
+    // recovery path the renderer calls on mount, so a dialog that timed out
+    // while the user was away would hold the slot and strand every prompt
+    // queued behind it until the next mount. Pi resolves an expired request
+    // itself without sending a cancel, so nothing else would move the queue.
+    for (const [manager, entry] of delivered) {
+      if (!isExpired(entry)) continue
+      delivered.delete(manager)
+      origins.delete(entry.event.id)
+      // Hand the freed slot over now, so the released dialog is replaced
+      // instead of leaving the workspace with a visible count and no dialog.
+      deliverNext(manager)
+    }
     const counts: PendingPromptCounts = {}
     for (const [manager, entries] of queues) {
       const live = reapExpired(entries)
