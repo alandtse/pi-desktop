@@ -298,7 +298,15 @@ export class RelaySessionBridge {
     const local = await localRoomsCached(rooms.map((room) => room.room_id))
     return rooms
       .filter((room) => !local.has(room.room_id))
-      .map((room) => toRemoteSessionRow(room, agent))
+      .map((room) => {
+        // The room names the machine that owns it; `agent` only does when there
+        // is a single pairing. Stamping every room with the selected machine put
+        // another machine's sessions under this one's tab — the Windows sessions
+        // appeared under "This Mac", and opening one would have driven this
+        // machine's Pi instead of the Pi the room lives on.
+        const owner = (room.peer && state.agents.find((machine) => machine.pubkey === room.peer)) || agent
+        return toRemoteSessionRow(room, owner)
+      })
   }
 
   /**

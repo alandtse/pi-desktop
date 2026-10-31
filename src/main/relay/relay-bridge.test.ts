@@ -387,6 +387,41 @@ test('a remote session row is named after its own session, not the folder', asyn
   assert.equal(new Set(rows.map((row) => row.session.path)).size, 2)
 })
 
+test('a room is stamped with the machine that owns it, not the selected one', async () => {
+  // With two machines paired, the roster carries rooms from both. Stamping every
+  // room with the selected machine put the other machine's sessions under this
+  // one's tab — the Windows sessions showed up under "This Mac" — and opening one
+  // would have driven the wrong Pi.
+  const OTHER: PairedRelayAgent = {
+    pubkey: 'hKqfHH3rUAvSuwGI9yam2BkM5DCiiGlIgs53wFR+SiQ=',
+    agentName: 'windows',
+    roomId: 'room-win',
+    pairedAt: '2026-10-20T00:00:00.000Z',
+  }
+  const subject = harness({
+    relay: { enabled: true, url: 'http://a:3000', pairedAgent: AGENT, pairedAgents: [AGENT, OTHER] },
+  })
+  await subject.bridge.start()
+  subject.managers[0]!.emitChange({
+    status: 'paired',
+    agent: AGENT,
+    agents: [AGENT, OTHER],
+    rooms: [
+      { ...ROOM, peer: AGENT.pubkey },
+      { cwd: 'C:\\Users\\a\\proj', name: 'win-project', room_id: 'win1', peer: OTHER.pubkey },
+    ],
+  })
+
+  const rows = await subject.bridge.sessions()
+  const byRoom = new Map(rows.map((row) => [row.ref.roomId, row]))
+
+  assert.equal(byRoom.get('abc')?.ref.peer, AGENT.pubkey)
+  assert.equal(byRoom.get('win1')?.ref.peer, OTHER.pubkey, 'the Windows room must not be claimed by this Mac')
+  // The synthetic path is what the sidebar groups on, so it has to carry the
+  // owner too or both machines collapse into one group.
+  assert.equal(byRoom.get('win1')?.session.path, `remote://${OTHER.pubkey}/win1`)
+})
+
 test('a room this machine is running never becomes a remote row', async () => {
   // A machine paired with itself is told about its own live sessions. The same
   // session already has a local row from disk, so listing it again as another
