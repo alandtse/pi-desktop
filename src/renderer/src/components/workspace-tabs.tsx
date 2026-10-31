@@ -46,18 +46,27 @@ export function WorkspaceTabs(): React.JSX.Element {
   const newSessionShortcut = useAppStore((state) => activeShortcuts(state).newSession)
   const setCurrentView = useAppStore((state) => state.setCurrentView)
   /**
-   * Leaves a remote project for the local chat that is already open.
+   * Leaves a remote project for the local chat that was on screen before it.
    *
    * A remote project tab and a local one are peers in this row, so choosing the
    * local one has to let go of the remote binding — otherwise two projects would
    * read as active and the composer would keep talking to the other machine.
+   *
+   * Clearing the binding is NOT enough. `openRemoteSession` nulls `sessionState`,
+   * so `sessionState.sessionFile` is empty exactly when this runs; reading only
+   * that found no path, and the function fell through to "clear the binding" while
+   * leaving the remote transcript on screen. The local tab then showed the other
+   * machine's conversation. `localSessionBeforeRemote` is what the store recorded
+   * for this purpose when the remote chat opened.
    */
   const getBackToLocalChat = (): void => {
-    const path = sessionState?.sessionFile
+    const path = switchingToSessionFile ?? sessionState?.sessionFile ?? localSessionBeforeRemote
     if (path) void switchSession(path, activeWorkspace?.path)
     else useAppStore.setState({ activeRemoteRef: null })
   }
   const sessionState = useAppStore((state) => state.sessionState)
+  const switchingToSessionFile = useAppStore((state) => state.switchingToSessionFile)
+  const localSessionBeforeRemote = useAppStore((state) => state.localSessionBeforeRemote)
 
   const toolView = ['settings', 'packages', 'notes', 'skills', 'diagnostics'] as const
   const toolsActive =

@@ -48,7 +48,18 @@ before(async () => {
             if (switchDelay) await new Promise((resolve) => setTimeout(resolve, switchDelay))
             return switchAnswer(path)
           },
-          getState: async () => ({ success: true, data: { messageCount: 2 } }),
+          // Main answers with the full state, `sessionFile` included: that field is
+          // how the store knows which chat is on screen, and a stub missing it made
+          // the "return to the local chat" path look broken when it was not.
+          getState: async () => ({
+            success: true,
+            data: {
+              sessionFile: useAppStore?.getState().activeSessionRuntimeId === 'rt-shaders'
+                ? SHADERS_SESSION
+                : HOME_SESSION,
+              messageCount: 2,
+            },
+          }),
           getStats: async () => ({ success: true, data: null }),
           getMessages: async () => ({
             success: true,
@@ -62,7 +73,16 @@ before(async () => {
           interruption: async () => null,
           interruptedChats: async () => [],
         },
-        relay: { sessions: async () => [], openSession: async () => ({}) },
+        relay: {
+          sessions: async () => [],
+          // A remote chat's transcript as the bridge returns it: `events` in the
+          // relay's own wire shape, plus the ref it settled on.
+          openSession: async (ref: { peer: string; roomId: string }) => ({
+            ref,
+            events: [{ type: 'message_start', role: 'assistant' }, { type: 'text_delta', delta: 'windows-only transcript' }],
+            truncated: false,
+          }),
+        },
         workspace: { setActive: async (id: string) => (id === SHADERS.id ? SHADERS : HOME) },
         ui: { flushPendingPrompts: async () => undefined, setEditorDirty: () => undefined },
         permissionRules: { workspaceStatus: async () => ({ hasWorkspaceRules: false }) },
@@ -292,4 +312,60 @@ test('coming home to a live runtime reuses its cached transcript', async () => {
   } finally {
     window.piDesktop.session.getMessages = realGetMessages
   }
+})
+
+test('leaving a remote chat for a local tab restores that local chat, not the remote transcript', async () => {
+  // Reported: switching from a Windows remote session tab to the local tab beside
+  // it kept showing the remote session's content.
+  //
+  // `openRemoteSession` nulls `sessionState`, so the only record of the local chat
+  // on screen has to be taken before that happens. `getBackToLocalChat` read
+  // `sessionState.sessionFile` — empty exactly when it ran — so it found no path,
+  // cleared the relay binding, and left the other machine's transcript displayed.
+  await open(HOME_SESSION, HOME)
+  const localMessages = useAppStore.getState().messages
+  assert.ok(localMessages.length > 0, 'precondition: the local chat has content')
+
+  // Open a remote chat the way the sidebar does. This is the step that drops
+  // `sessionState`, so it is also the step that has to record where it came from.
+  await useAppStore.getState().openRemoteSession({ peer: 'WINDOWS_PEER', roomId: 'HELMETROOM01' })
+  await settle()
+  assert.equal(
+    useAppStore.getState().activeRemoteRef?.roomId,
+    'HELMETROOM01',
+    'precondition: the remote chat is on screen',
+  )
+
+  const path = useAppStore.getState().switchingToSessionFile ??
+    useAppStore.getState().sessionState?.sessionFile ??
+    useAppStore.getState().localSessionBeforeRemote
+  assert.equal(path, HOME_SESSION, 'the local chat to return to must still be recorded')
+
+  await useAppStore.getState().switchSession(path, HOME.path)
+  await settle()
+
+  const state = useAppStore.getState()
+  assert.equal(state.activeRemoteRef, null, 'the relay binding must be released')
+  assert.equal(state.sessionState?.sessionFile, HOME_SESSION, 'the local session must own the view again')
+  assert.ok(
+    state.messages.some((message) => message.content.includes('hello')),
+    'the local transcript must replace the remote one',
+  )
+  assert.ok(
+    !state.messages.some((message) => message.content.includes('windows-only transcript')),
+    'the remote transcript must not survive the switch',
+  )
+})
+
+test('opening a remote chat records the local chat it replaced', async () => {
+  await open(HOME_SESSION, HOME)
+  await useAppStore.getState().openRemoteSession({ peer: 'WINDOWS_PEER', roomId: 'HELMETROOM01' })
+  await settle()
+  // `openRemoteSession` clears `sessionState`, so the record has to have been
+  // taken first — that ordering is the whole point of the field.
+  assert.equal(
+    useAppStore.getState().localSessionBeforeRemote,
+    HOME_SESSION,
+    'the store must remember which local chat a remote chat displaced',
+  )
 })

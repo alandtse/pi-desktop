@@ -560,6 +560,16 @@ interface AppState {
    */
   switchingToSessionFile: string | null
   /**
+   * The local session file a remote chat replaced, so leaving it can come back.
+   *
+   * `openRemoteSession` nulls `sessionState` and binds the view to a room, which
+   * discards the ONLY record of which local chat was on screen. Returning to a
+   * local project then had nothing to switch to: it cleared the relay binding and
+   * left the remote transcript displayed under a local tab. Null while a local
+   * chat is on screen.
+   */
+  localSessionBeforeRemote: string | null
+  /**
    * How much of the remote transcript the other machine actually sent.
    *
    * `null` for a local chat. The Pi reports whether it truncated, but never how
@@ -1904,6 +1914,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
   heldSendQueues: [],
   activeChatKey: '',
   switchingToSessionFile: null,
+  localSessionBeforeRemote: null,
   remoteHistory: null,
   persistSendQueues: () => {
     // Fire-and-forget: the queue in memory is the truth. Persisting is a
@@ -2814,6 +2825,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
         promptHistory: promptHistoryFrom(cached.messages),
         activeChatKey: localQueueKey(currentSessionFile ?? null, runtimeId),
         switchingToSessionFile: null,
+        localSessionBeforeRemote: null,
       })
       // The switch cleared sessionState, and that is where the model lives: the
       // picker reads sessionState.model, and assistant messages fall back to it
@@ -2910,6 +2922,10 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
             activeChatKey: localQueueKey(sessionFile ?? null, get().activeSessionRuntimeId),
             // The switch has landed, so the pending target is no longer needed.
             switchingToSessionFile: null,
+            // A local chat is on screen again, so there is nothing left to return
+            // to. Clearing it is what stops a stale file resurrecting an older
+            // chat the next time a remote session is opened.
+            localSessionBeforeRemote: null,
           })
         } else {
           set({ sessionLoading: false })
@@ -3125,6 +3141,17 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
       extensionUiRequest: null,
     todoState: null,
       activeRemoteRef: ref,
+      // Captured before `sessionState` is dropped below: leaving a remote chat for
+      // a local project had no other record of which chat to restore, so the local
+      // tab simply kept showing the remote transcript.
+      //
+      // Current chat first, remembered one last: remote→remote keeps the local chat
+      // the user actually came from, while local→remote records the one on screen.
+      localSessionBeforeRemote:
+        get().switchingToSessionFile ??
+        get().sessionState?.sessionFile ??
+        get().localSessionBeforeRemote ??
+        null,
     })
     get().clearMessages()
     // A remote chat is keyed the way its row is keyed: by the room it came
