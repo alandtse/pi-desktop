@@ -7,6 +7,7 @@ import {
   readTodoSnapshot,
   remainingCount,
   todoCounts,
+  todoFromMessages,
   visibleTasks,
   type TodoSourceEntry,
 } from './todo-state'
@@ -125,4 +126,51 @@ test('the active task is the one being worked on', () => {
   const tasks = visibleTasks(foldTodoEvent(null, entry(TASKS)))
   assert.equal(activeTask(tasks)?.subject, 'Render the rows')
   assert.equal(activeTask([]), null)
+})
+
+// ─── Rebuilding the list from a transcript ───────────────────────────────────
+
+const SNAPSHOT_A = { tasks: [{ id: 1, subject: 'first', status: 'pending' }], nextId: 2 }
+const SNAPSHOT_B = { tasks: [{ id: 1, subject: 'first', status: 'completed' }], nextId: 2 }
+
+test('a transcript rebuilds the list a tab switch used to blank', () => {
+  // The snapshot lives on the branch stream, which a switched-to session never
+  // replays; without this the panel went empty on every switch and stayed empty
+  // until the agent happened to change the list again.
+  const snapshot = todoFromMessages([
+    { role: 'user', timestamp: 1 },
+    { role: 'toolResult', toolName: 'todo', toolDetails: SNAPSHOT_A, timestamp: 1000 },
+    { role: 'toolResult', toolName: 'todo', toolDetails: SNAPSHOT_B, timestamp: 2000 },
+  ])
+  assert.equal(snapshot?.tasks[0]?.status, 'completed', 'the newest snapshot wins')
+  assert.equal(snapshot?.updatedAt, 2000, 'the list is dated by the result that wrote it')
+})
+
+test('a transcript with no todo call rebuilds nothing', () => {
+  assert.equal(todoFromMessages([{ role: 'user', timestamp: 1 }]), null)
+  // A todo call that changed nothing carries no snapshot; it must not blank a list.
+  assert.equal(todoFromMessages([
+    { role: 'toolResult', toolName: 'todo', toolDetails: { action: 'list' }, timestamp: 1 },
+  ]), null)
+})
+
+test('another tool result never supplies a task list', () => {
+  assert.equal(todoFromMessages([
+    { role: 'toolResult', toolName: 'bash', toolDetails: SNAPSHOT_A, timestamp: 1 },
+  ]), null)
+})
+
+test('a live entry is dated by the entry timestamp', () => {
+  const folded = foldTodoEvent(null, {
+    type: 'custom',
+    customType: TODO_STATE_ENTRY_TYPE,
+    data: SNAPSHOT_A,
+    timestamp: 1793257164761,
+  })
+  assert.equal(folded?.updatedAt, 1793257164761)
+})
+
+test('a snapshot with no timestamp shows no time rather than an invented one', () => {
+  const folded = foldTodoEvent(null, { type: 'custom', customType: TODO_STATE_ENTRY_TYPE, data: SNAPSHOT_A })
+  assert.equal(folded?.updatedAt, undefined)
 })

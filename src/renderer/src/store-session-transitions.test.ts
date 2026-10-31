@@ -3585,3 +3585,50 @@ test('remote transcript from another room is still not appended', async () => {
   assert.equal(state.isStreaming, false)
   assert.equal(state.messages.length, 0)
 })
+
+// ─── The task list survives a tab switch ─────────────────────────────────────
+
+test('a switched-to chat shows the task list its own history holds', async () => {
+  // The snapshot is written to the branch stream, which a switched-to session never
+  // replays, so the panel used to blank on every switch and stay blank until the
+  // agent changed the list again. The same snapshot is in the transcript's todo tool
+  // results, so the load path can rebuild it without asking the engine for anything.
+  const workspace = {
+    id: 'proj-todo',
+    name: 'proj',
+    path: '/tmp/proj-todo',
+    sessionCount: 1,
+    createdAt: 0,
+    lastActiveAt: 0,
+    color: '#000',
+  }
+  const snapshot = { action: 'write', tasks: [{ id: 1, subject: 'ship it', status: 'completed' }], nextId: 2 }
+  getMessagesResult = [
+    { role: 'user', content: [{ type: 'text', text: 'do the work' }], timestamp: 1 },
+    {
+      role: 'toolResult',
+      toolName: 'todo',
+      content: [{ type: 'text', text: 'Task list updated' }],
+      details: snapshot,
+      // A real epoch-ms stamp: parseTimestamp reads a small number as seconds and
+      // scales it, which is right for pi and wrong for a fixture written in ms.
+      timestamp: 1793257164761,
+    },
+  ]
+  activeWorkspaceResult = workspace
+  sessionStateResult = resumedSessionState('/tmp/with-todo.jsonl')
+  useAppStore.setState({
+    activeWorkspace: workspace,
+    workspaces: [workspace],
+    piStatus: 'running',
+    sessionState: resumedSessionState('/tmp/with-todo.jsonl'),
+    activeSessionRuntimeId: 'runtime-todo',
+    messages: [],
+    todoState: null,
+  })
+  await useAppStore.getState().reloadActiveSession({ refreshList: false })
+
+  const state = useAppStore.getState()
+  assert.equal(state.todoState?.tasks[0]?.subject, 'ship it', 'the list must survive the load')
+  assert.equal(state.todoState?.updatedAt, 1793257164761, 'and carry the moment it changed')
+})

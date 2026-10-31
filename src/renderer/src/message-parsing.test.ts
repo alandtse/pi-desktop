@@ -201,3 +201,26 @@ test('a live extension message parses even though its shape differs from the rec
   // `display: false` is the extension saying "bookkeeping", not "show this".
   assert.equal(parseAgentMessage({ ...live, display: false }), null)
 })
+
+test('a tool result keeps its structured payload so the task list can be rebuilt', () => {
+  // The parser used to drop `details`, which is why a session reloaded from its file
+  // could not recover the agent's task list: the only trace left in the message was
+  // prose. The snapshot is the same envelope rpiv-todo writes to the branch entry.
+  const details = { action: 'write', tasks: [{ id: 1, subject: 'first', status: 'completed' }], nextId: 2 }
+  const parsed = parseAgentMessage({
+    role: 'toolResult',
+    toolName: 'todo',
+    content: [{ type: 'text', text: 'Task list updated' }],
+    details,
+    timestamp: 1793257164761,
+  })
+  assert.deepEqual(parsed?.toolDetails, details, 'the snapshot must survive parsing')
+  assert.equal(parsed?.timestamp, 1793257164761, 'and its own clock comes with it')
+})
+
+test('a tool result whose payload is not a record carries no snapshot', () => {
+  // A bare string or number says nothing this app reads, and keeping it would make
+  // callers guard a type the shape already rules out.
+  const parsed = parseAgentMessage({ role: 'toolResult', content: [{ type: 'text', text: 'ok' }], details: 'done' })
+  assert.equal(parsed?.toolDetails, undefined)
+})

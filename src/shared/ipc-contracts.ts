@@ -1250,6 +1250,7 @@ import type { CouncilConfig } from './council-config'
 import type { VoicePrecision, VoiceModel, VoiceModelManifest, VoiceDownloadProgress } from './voice-models'
 import type { VoiceDevice } from './voice-device'
 import type { ChatWidth } from './chat-width'
+import type { TodoPlacementMode } from './todo-placement'
 /** Result of the MODELS_READ IPC call. */
 /**
  * Where the custom-models config was read from. Main resolves the engine and
@@ -1435,6 +1436,10 @@ export interface AppSettings {
   // Chat column width: 'normal' keeps a readable column, 'full' uses the whole
   // chat area. Unknown values reset to 'normal' on load.
   chatWidth: ChatWidth
+  // Where the agent's task list sits. 'auto' puts it in the empty space beside a
+  // readable chat column and stacks it above the transcript when there is no such
+  // space; 'inline' always stacks; 'hidden' never shows it.
+  todoPlacement: TodoPlacementMode
   showThinking: boolean
   autoScroll: boolean
   // Read text between single dollar signs, like $x$, as math in chat. Off by

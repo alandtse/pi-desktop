@@ -204,7 +204,8 @@
       "title": "任务",
       "toggle": "显示或隐藏任务列表",
       "remaining": "剩余 {{n}} / {{total}}",
-      "allDone": "已完成 {{n}}"
+      "allDone": "已完成 {{n}}",
+      "hide": "隐藏任务列表"
     },
     "mesh": {
       "from": "来自 {{from}}",

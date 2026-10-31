@@ -85,3 +85,15 @@ test('skill groups default to none and are cleaned on load', () => {
   assert.deepEqual(settings.skillGroups, [{ id: 'a', name: 'Git', skills: ['commit'], collapsed: true }])
   assert.deepEqual(normalizeStoredSettings({ skillGroups: 'bad' }, LANGUAGES).skillGroups, [])
 })
+
+test('an unknown task-list placement falls back to auto', () => {
+  // The value comes from a file a person can hand-edit, so the renderer must never
+  // index a lookup with something no build writes.
+  const normalized = normalizeStoredSettings({ todoPlacement: 'sideways' }, ['en'])
+  assert.equal(normalized.todoPlacement, 'auto')
+})
+
+test('a real task-list placement is kept', () => {
+  assert.equal(normalizeStoredSettings({ todoPlacement: 'hidden' }, ['en']).todoPlacement, 'hidden')
+  assert.equal(normalizeStoredSettings({ todoPlacement: 'inline' }, ['en']).todoPlacement, 'inline')
+})

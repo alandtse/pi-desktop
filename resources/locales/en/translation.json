@@ -212,7 +212,8 @@
       "title": "Tasks",
       "toggle": "Show or hide the task list",
       "remaining": "{{n}} left of {{total}}",
-      "allDone": "{{n}} done"
+      "allDone": "{{n}} done",
+      "hide": "Hide the task list"
     },
     "mesh": {
       "from": "From {{from}}",

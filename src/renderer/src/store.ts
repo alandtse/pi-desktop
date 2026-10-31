@@ -28,7 +28,7 @@ import { markUnansweredToolCallsRunning, settleRunningToolCall } from './reattac
 import type { PiCommand } from '../../shared/pi-command'
 import type { InterruptedReason } from '../../shared/interrupted-turn'
 import { continuationPrompt } from '../../shared/interrupted-turn'
-import { foldTodoEvent, type TodoSnapshot, type TodoSourceEntry } from './todo-state'
+import { foldTodoEvent, todoFromMessages, type TodoSnapshot, type TodoSourceEntry } from './todo-state'
 import type { SkillGroup } from '../../shared/skill-groups'
 import { forkPointForUserMessage, normalizeForkMessages, type ForkPoint } from '../../shared/fork-point'
 import { buildLineageTree, type LineageNode } from '../../shared/session-lineage'
@@ -2901,6 +2901,11 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
           set({
             messages: finalMessages,
             sessionLoading: false,
+            // The task list lives on the branch stream, which a switched-to session
+            // never replays, so a tab switch used to blank it. Its snapshots are also
+            // in the todo tool results this transcript already holds, which is why it
+            // can be recovered here without asking the engine for anything.
+            todoState: todoFromMessages(finalMessages),
             promptHistory: promptHistoryFrom(finalMessages),
             activeChatKey: localQueueKey(sessionFile ?? null, get().activeSessionRuntimeId),
             // The switch has landed, so the pending target is no longer needed.

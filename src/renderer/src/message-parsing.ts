@@ -52,6 +52,14 @@ export interface DisplayMessage {
   /** toolResult only: its call's arguments, set when the call shared its turn with others. */
   toolCallArguments?: string
   isError?: boolean
+  /**
+   * The tool result's structured payload, when it had one.
+   *
+   * A `todo` call carries the whole task snapshot in `details`. The parser used to
+   * discard it, which is why a session reloaded from its file could not recover the
+   * list an entry-written session showed: the only trace left was plain text.
+   */
+  toolDetails?: Record<string, unknown>
   /** assistant only: the user stopped this answer before it finished. */
   stopped?: boolean
 }
@@ -221,6 +229,11 @@ export function parseAgentMessage(msg: unknown): DisplayMessage | null {
       toolCallId: typeof m.toolCallId === 'string' ? m.toolCallId : undefined,
       toolName: typeof m.toolName === 'string' ? m.toolName : undefined,
       isError: typeof m.isError === 'boolean' ? m.isError : undefined,
+      // The structured payload, same as a custom message keeps. A todo tool result
+      // carries the task snapshot here, and dropping it meant a session reloaded from
+      // its file could not recover the list. Bounded to records: a tool result whose
+      // details are a bare string or number says nothing this app reads.
+      ...(isPlainRecord(m.details) ? { toolDetails: m.details } : {}),
     }
   }
 

@@ -1,6 +1,9 @@
-import { useState } from 'react'
+import { useContext, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ChevronDown, ChevronRight, CircleDot, Circle, Check } from 'lucide-react'
+import { ChevronDown, ChevronRight, CircleDot, Circle, Check, X } from 'lucide-react'
+import { NowContext } from '../utils/relative-time'
+import { formatRelativeTime } from '../utils/format-relative-time'
+import type { TodoPlacement } from '../utils/todo-placement'
 import {
   ACTIVE_STATUS,
   activeTask,
@@ -22,10 +25,25 @@ import {
  * reading the conversation, not a thing to interact with, and the agent is the one
  * that owns the list.
  */
-export function TodoPanel({ snapshot }: { snapshot: TodoSnapshot | null }): React.JSX.Element | null {
+export function TodoPanel({
+  snapshot,
+  placement,
+  onHide,
+}: {
+  snapshot: TodoSnapshot | null
+  /** Where the caller has room to draw it; the inline fallback is the old layout. */
+  placement: TodoPlacement
+  /** Offered in the header so the panel can be dismissed without a settings trip. */
+  onHide?: () => void
+}): React.JSX.Element | null {
   const { t } = useTranslation()
   const tasks = visibleTasks(snapshot)
-  const [open, setOpen] = useState(true)
+  const now = useContext(NowContext)
+  // The gutter is narrow, so it starts collapsed there: a full list beside the
+  // transcript is a second column of text competing with the answer. Above the
+  // transcript there is vertical room and the old default still reads better.
+  const [open, setOpen] = useState(placement.mode !== 'gutter')
+  const inGutter = placement.mode === 'gutter'
 
   // A chat with no task list gets no panel. One with tasks all done still does — the
   // finished state is what tells the user the work is finished.
@@ -33,10 +51,20 @@ export function TodoPanel({ snapshot }: { snapshot: TodoSnapshot | null }): Reac
 
   const counts = todoCounts(tasks)
   const active = activeTask(tasks)
+  // Dates the whole list by its last recorded change. A snapshot with no time shows
+  // nothing rather than a time the panel guessed.
+  const updatedLabel = snapshot?.updatedAt ? formatRelativeTime(snapshot.updatedAt, now) : null
 
   return (
-    <div className="mx-auto w-full max-w-3xl px-4 pt-3">
-      <div className="overflow-hidden rounded-lg border border-border bg-surface">
+    <div
+      className={
+        inGutter
+          ? 'shrink-0 pt-3 pl-3'
+          : 'mx-auto w-full max-w-3xl px-4 pt-3'
+      }
+      style={inGutter ? { width: placement.width } : undefined}
+    >
+      <div className="relative overflow-hidden rounded-lg border border-border bg-surface">
         <button
           type="button"
           onClick={() => setOpen((value) => !value)}
@@ -58,7 +86,25 @@ export function TodoPanel({ snapshot }: { snapshot: TodoSnapshot | null }): Reac
           {!open && active && (
             <span className="ml-1 truncate text-xs text-accent">{active.activeForm || active.subject}</span>
           )}
+          {/* When the list last changed. Every branch entry carries a timestamp, so
+              this is the moment the agent recorded the state, not when the panel
+              happened to render. Kept out of the gutter, where the header already
+              has to fit a title, a count and a task name in ~200px. */}
+          {!inGutter && updatedLabel && (
+            <span className="ml-auto shrink-0 pl-2 text-faint">{updatedLabel}</span>
+          )}
         </button>
+        {onHide && (
+          <button
+            type="button"
+            onClick={onHide}
+            className="absolute right-1 top-1 rounded p-1 text-faint hover:bg-highlight hover:text-primary"
+            title={t('chat.todo.hide')}
+            aria-label={t('chat.todo.hide')}
+          >
+            <X size={12} />
+          </button>
+        )}
         {open && (
           <ul className="border-t border-border px-3 py-1.5">
             {tasks.map((task) => (

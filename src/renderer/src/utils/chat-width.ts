@@ -15,3 +15,17 @@ const MESSAGE_COLUMN_CLASS: Record<ChatWidth, string> = {
 export function messageColumnClass(width: ChatWidth): string {
   return MESSAGE_COLUMN_CLASS[width]
 }
+
+/**
+ * The centred conversation column as pixels, so a caller can reason about the space
+ * beside it. Mirrors the same two classes `messageColumnClass` writes — keeping them in
+ * one file is what stops a width change from silently desyncing the gutter decision.
+ */
+const MESSAGE_COLUMN_MAX_PX: Record<ChatWidth, number> = {
+  normal: 768,
+  full: Number.POSITIVE_INFINITY,
+}
+
+export function messageColumnMaxPx(width: ChatWidth): number {
+  return MESSAGE_COLUMN_MAX_PX[width]
+}

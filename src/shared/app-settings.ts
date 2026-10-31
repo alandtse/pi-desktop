@@ -6,6 +6,7 @@ import { isPermissionMode } from './permission-mode'
 import { getVoiceModel, type VoicePrecision } from './voice-models'
 import { isVoiceDevice } from './voice-device'
 import { isChatWidth } from './chat-width'
+import { isTodoPlacementMode } from './todo-placement'
 import { normalizeKeyboardShortcuts } from './keyboard-shortcuts'
 import { normalizeSkillGroups } from './skill-groups'
 
@@ -30,6 +31,7 @@ export function normalizeStoredSettings(stored: Record<string, unknown>, languag
   if (!isEngineSetting(merged.piEngine)) merged.piEngine = DEFAULT_SETTINGS.piEngine
   if (!isPermissionMode(merged.permissionMode)) merged.permissionMode = DEFAULT_SETTINGS.permissionMode
   if (!isChatWidth(merged.chatWidth)) merged.chatWidth = DEFAULT_SETTINGS.chatWidth
+  if (!isTodoPlacementMode(merged.todoPlacement)) merged.todoPlacement = DEFAULT_SETTINGS.todoPlacement
   merged.uiFontFamily = typeof merged.uiFontFamily === 'string'
     ? merged.uiFontFamily.trim()
     : DEFAULT_SETTINGS.uiFontFamily

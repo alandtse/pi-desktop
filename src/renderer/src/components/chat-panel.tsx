@@ -35,6 +35,7 @@ import { SubagentPanel } from './subagent-panel'
 import { TerminalPanel } from './terminal'
 import { isFileWatchDemanded, useChatScroll, useChatVisible, useChatWidth } from '../hooks'
 import { messageColumnClass } from '../utils/chat-width'
+import { todoPlacement } from '../utils/todo-placement'
 import { createMeasureRef } from '../utils/element-measure'
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -84,7 +85,20 @@ export function ChatPanel(): React.JSX.Element {
   const toggleFileSearch = useAppStore((state) => state.toggleFileSearch)
   const previewTarget = useAppStore((state) => state.previewTarget)
   const reviewOpen = useAppStore((state) => state.reviewOpen)
-  const messageColumn = messageColumnClass(useChatWidth())
+  const chatWidth = useChatWidth()
+  const messageColumn = messageColumnClass(chatWidth)
+  // The chat centre, not the window: the side panel, the review pane and a stacked
+  // terminal all shrink it while the window stays wide, so gutter space has to be
+  // measured here rather than inferred from a breakpoint.
+  const [centreWidth, centreRef] = useElementMeasure(readClientWidth, Number.POSITIVE_INFINITY)
+  const todoPreference = useAppStore((state) => state.settings?.todoPlacement ?? 'auto')
+  const hideTodoPanel = async (): Promise<void> => {
+    // Written straight to the settings file, the same path the settings panel uses:
+    // the preference is machine-wide and must outlive the chat the user hid it in.
+    const updated = await window.piDesktop.settings.save({ todoPlacement: 'hidden' })
+    useAppStore.setState({ settings: updated })
+  }
+  const placement = todoPlacement(centreWidth, chatWidth)
 
   // sidePanel lives in the store so it survives view switches (e.g. Settings
   // round-trip). Widths stay local — resetting them on remount is benign.
@@ -296,7 +310,18 @@ export function ChatPanel(): React.JSX.Element {
           that moves beside or under the chat column keeps its parent and its slot,
           so React does not mount it again (the editor keeps its unsaved edits). */}
       <div ref={panelRowRef} className="grid min-h-0 flex-1 overflow-hidden" style={resolvePaneGrid(paneLayout)}>
-        <div className="chat-center flex flex-col overflow-hidden" style={{ gridArea: PANE_GRID_AREA.chat }}>
+        <div ref={centreRef} className="chat-center flex overflow-hidden" style={{ gridArea: PANE_GRID_AREA.chat }}>
+          {/* The task list sits in the empty space beside the centred column when there
+              is room for it, so it costs the conversation nothing. Below the threshold
+              it falls back to the stacked layout it has always had. */}
+          {todoPreference !== 'hidden' && placement.mode === 'gutter' && (
+            <TodoPanel
+              snapshot={todoState}
+              placement={placement}
+              onHide={() => void hideTodoPanel()}
+            />
+          )}
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
           <div ref={chatDropZoneRef} className="relative flex min-h-0 flex-1 flex-col">
             {searchOpen && (
               <ChatSearch
@@ -365,8 +390,14 @@ export function ChatPanel(): React.JSX.Element {
                 <>
                   {/* Above the transcript, outside the scroller: the list is context
                       for reading the conversation, and it should stay put while the
-                      answer scrolls past it. */}
-                  <TodoPanel snapshot={todoState} />
+                      answer scrolls past it. Only when no gutter could hold it. */}
+                  {todoPreference !== 'hidden' && placement.mode === 'inline' && (
+                    <TodoPanel
+                      snapshot={todoState}
+                      placement={placement}
+                      onHide={() => void hideTodoPanel()}
+                    />
+                  )}
                   <div ref={scrollRef} onScroll={onScroll} className="flex-1 overflow-y-auto">
                     {/* Only when there is genuinely nothing to show. Once the
                         cached transcript is on screen the load is a refresh,
@@ -468,6 +499,7 @@ export function ChatPanel(): React.JSX.Element {
                 </>
               )
             })()}
+          </div>
           </div>
         </div>
 

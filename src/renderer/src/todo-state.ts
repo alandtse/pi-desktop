@@ -38,6 +38,15 @@ export interface TodoSnapshot {
   tasks: TodoTask[]
   nextId: number
   /**
+   * When this snapshot was recorded, in epoch ms, when the source could tell.
+   *
+   * Every branch entry pi streams carries a timestamp, so the list the app shows
+   * knows when each state change happened even though rpiv-todo stores only the
+   * tasks themselves. Optional because a payload read from a tool result on an
+   * older session may arrive without one.
+   */
+  updatedAt?: number
+  /**
    * True when this came from a `rpiv-todo-state` branch entry. Entries are written for
    * every state change, so once one is seen a tool result cannot add anything — it can
    * only repeat or predate it. Without this flag a reload would freeze on the first
@@ -89,7 +98,15 @@ export interface TodoSourceEntry {
   type?: string
   customType?: string
   data?: unknown
-  message?: { role?: string; toolName?: string; details?: unknown }
+  /** Epoch ms written by pi on every branch entry; the only clock this list has. */
+  timestamp?: number
+  message?: {
+    role?: string
+    toolName?: string
+    details?: unknown
+    /** Pi stamps each message too, so a tool result can date its own snapshot. */
+    timestamp?: number
+  }
 }
 
 /**
@@ -101,17 +118,35 @@ export interface TodoSourceEntry {
  * `details` carry the envelope. Deletions are honoured because `rpiv-todo` marks a
  * task `deleted` rather than removing it — showing it would contradict the agent.
  */
+/**
+ * The moment a snapshot was recorded, when the source carries one.
+ *
+ * Timestamps arrive as epoch ms from pi, but a hand-edited or older session can hold
+ * an ISO string; both are worth dating the list with, and anything else is ignored so
+ * the panel shows no time rather than an invented one.
+ */
+function readTimestamp(value: unknown): number | undefined {
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  if (typeof value === 'string') {
+    const parsed = Date.parse(value)
+    if (!Number.isNaN(parsed)) return parsed
+  }
+  return undefined
+}
+
 export function foldTodoEvent(previous: TodoSnapshot | null, entry: TodoSourceEntry): TodoSnapshot | null {
   if (entry.type === 'entry_appended') {
     const appended = (entry as { entry?: TodoSourceEntry }).entry
     if (appended?.customType !== TODO_STATE_ENTRY_TYPE) return null
     const snapshot = readTodoSnapshot(appended.data)
-    return snapshot ? { ...snapshot, fromEntry: true } : null
+    const updatedAt = readTimestamp(appended.timestamp)
+    return snapshot ? { ...snapshot, fromEntry: true, ...(updatedAt !== undefined ? { updatedAt } : {}) } : null
   }
 
   if (entry.type === 'custom' && entry.customType === TODO_STATE_ENTRY_TYPE) {
     const snapshot = readTodoSnapshot(entry.data)
-    return snapshot ? { ...snapshot, fromEntry: true } : null
+    const updatedAt = readTimestamp(entry.timestamp)
+    return snapshot ? { ...snapshot, fromEntry: true, ...(updatedAt !== undefined ? { updatedAt } : {}) } : null
   }
 
   if (entry.message?.role === 'toolResult' && entry.message.toolName === TODO_TOOL_NAME) {
@@ -123,7 +158,8 @@ export function foldTodoEvent(previous: TodoSnapshot | null, entry: TodoSourceEn
     // before entries existed. Later tool results still win over earlier ones, which is
     // what makes a reload recover the final list rather than the first one.
     if (previous?.fromEntry) return null
-    return snapshot
+    const updatedAt = readTimestamp(entry.message.timestamp)
+    return updatedAt !== undefined ? { ...snapshot, updatedAt } : snapshot
   }
 
   return null
@@ -165,4 +201,28 @@ export function todoCounts(tasks: readonly TodoTask[]): TodoCounts {
     remaining: remainingCount(visible),
     done: visible.filter((task) => task.status === 'completed').length,
   }
+}
+
+/**
+ * Rebuild the task list from a transcript.
+ *
+ * The app used to lose the list on every tab switch, because a live switch only sends
+ * `get_messages` and the snapshot arrives on the branch stream, which a switched-to
+ * session never replays. A tool result does carry the same snapshot in `details`
+ * (measured: 26 branch entries and 29 todo tool results in one real session), so the
+ * list can be recovered from messages the app already receives.
+ *
+ * Messages older than the newest snapshot are folded in order and last write wins, the
+ * same precedence `foldTodoEvent` uses for a live stream — so a reloaded session and a
+ * live one cannot show different lists for the same history.
+ */
+export function todoFromMessages(messages: readonly { role: string; toolName?: string; toolDetails?: unknown; timestamp: number }[]): TodoSnapshot | null {
+  let snapshot: TodoSnapshot | null = null
+  for (const message of messages) {
+    if (message.role !== 'toolResult' || message.toolName !== TODO_TOOL_NAME) continue
+    snapshot = foldTodoEvent(snapshot, {
+      message: { role: message.role, toolName: message.toolName, details: message.toolDetails, timestamp: message.timestamp },
+    })
+  }
+  return snapshot
 }
