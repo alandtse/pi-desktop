@@ -595,10 +595,28 @@ export class RelaySessionManager extends EventEmitter {
   }
 
   private handleMessage(message: RelayInboundMessage, meta: { peer: string; room: string }): void {
-    // Ignore traffic from any peer that is not the Pi we paired with: the relay
-    // shares one socket across peers keyed by pubkey.
     const agent = this.state.agent
-    if (agent && meta.peer && meta.peer !== agent.pubkey) return
+    // Lifecycle frames describe whichever machine pushed them. With two pairings
+    // the relay speaks for both on ONE socket, so a frame naming another PAIRED
+    // machine is roster news, not foreign traffic — filtering on the selected peer
+    // discarded every push from the other machine, so its sessions never entered
+    // `roomsByPeer` and the sidebar stayed empty for it even though the relay
+    // reported them. A peer neither selected nor paired is still dropped.
+    //
+    // Scoped to lifecycle frames on purpose: replies (including `pair_ok` during
+    // pairing, when no agent is stored yet) are matched by request id below and
+    // must reach that lookup, which has its own peer check.
+    const lifecycle =
+      message.type === 'rooms' || message.type === 'room_announced' ||
+      message.type === 'room_meta_updated' || message.type === 'room_ended'
+    if (lifecycle && meta.peer) {
+      const paired = this.state.agents.some((machine) => machine.pubkey === meta.peer)
+      if (!paired) return
+    } else if (agent && meta.peer && meta.peer !== agent.pubkey) {
+      // Ignore traffic from any peer that is not the Pi we paired with: the relay
+      // shares one socket across peers keyed by pubkey.
+      return
+    }
 
     // A roster push names the peer it describes, so it is filtered by the same
     // pubkey check rather than trusted because it arrived first.

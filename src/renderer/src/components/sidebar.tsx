@@ -168,6 +168,38 @@ export function Sidebar(): React.JSX.Element {
             roomId: room.room_id,
           }))
 
+  /**
+   * Remote sessions grouped by the machine that runs them.
+   *
+   * One flat section headed with the SELECTED machine listed every other
+   * machine's sessions under that machine's name, and a count that mixed them.
+   * With more than one pairing the heading was simply wrong about where the rows
+   * lived. Grouping keeps each row under the computer it actually runs on.
+   */
+  const remoteGroups = useMemo(() => {
+    const groups = new Map<string, { peer: string; label: string; entries: typeof remoteEntries }>()
+    for (const entry of remoteEntries) {
+      // A row without a ref carries no peer; it can only be the selected machine,
+      // because the raw-room fallback is built from that machine's roster.
+      const peer = entry.ref?.peer ?? remote?.settings.pairedAgent?.pubkey ?? ''
+      const existing = groups.get(peer)
+      if (existing) existing.entries.push(entry)
+      else
+        groups.set(peer, {
+          peer,
+          label: machineDisplayName({
+            machineName: remote?.settings.pairedAgents?.find((machine) => machine.pubkey === peer)?.machineName ??
+              (remote?.settings.pairedAgent?.pubkey === peer ? remote.settings.pairedAgent.machineName : undefined) ??
+              undefined,
+            machineAlias: remote?.settings.machineNames[peer],
+            peer,
+          }),
+          entries: [entry],
+        })
+    }
+    return [...groups.values()]
+  }, [remoteEntries, remote])
+
   // The live width during a drag. Kept local so dragging never writes
   // settings.json; the draft outlives the drag so the row does not jump while the
   // save round-trips, and a remount falls back to the saved value.
@@ -821,33 +853,19 @@ export function Sidebar(): React.JSX.Element {
 
       {/* Sessions on other machines, driven over the relay. They are not files
           on this disk, so they cannot appear in Recent above. */}
-      {remoteEntries.length > 0 && (
-        <div className="shrink-0 border-t border-border px-2 py-1">
+      {remoteGroups.length > 0 && remoteGroups.map((group) => (
+        <div key={group.peer || 'selected'} className="shrink-0 border-t border-border px-2 py-1">
           <button
             onClick={() => setRemoteOpen((open) => !open)}
             className="flex w-full items-center gap-1.5 rounded px-2 py-1.5 text-xs font-medium uppercase tracking-wider text-dim hover:text-secondary transition-colors"
             title={t('sidebar.remote.headingTitle')}
             onContextMenu={(e) => {
-              const peer = remote?.settings.pairedAgent?.pubkey
-              if (!peer) return
-              const shown = machineDisplayName({
-                machineName: remote?.settings.pairedAgent?.machineName,
-                machineAlias: remote?.settings.machineNames[peer],
-                peer,
-              })
-              handleMachineContextMenu(e, peer, shown)
+              if (!group.peer) return
+              handleMachineContextMenu(e, group.peer, group.label)
             }}
             onDoubleClick={() => {
-              const peer = remote?.settings.pairedAgent?.pubkey
-              if (!peer) return
-              startMachineRename(
-                peer,
-                machineDisplayName({
-                  machineName: remote?.settings.pairedAgent?.machineName,
-                  machineAlias: remote?.settings.machineNames[peer],
-                  peer,
-                }),
-              )
+              if (!group.peer) return
+              startMachineRename(group.peer, group.label)
             }}
           >
             <ChevronDown
@@ -856,24 +874,17 @@ export function Sidebar(): React.JSX.Element {
             />
             <Laptop size={12} className="shrink-0" />
             <span className="min-w-0 flex-1 truncate text-left">
-              {renamingWhere === 'machine' && renamingPeer === remote?.settings.pairedAgent?.pubkey
+              {renamingWhere === 'machine' && renamingPeer === group.peer
                 ? renderRenameInput()
-                : t('sidebar.remote.heading', {
-                    name: machineDisplayName({
-                      machineName: remote?.settings.pairedAgent?.machineName,
-                      machineAlias: remote?.settings.pairedAgent
-                        ? remote.settings.machineNames[remote.settings.pairedAgent.pubkey]
-                        : undefined,
-                      peer: remote?.settings.pairedAgent?.pubkey,
-                    }),
-                  })}
+                : t('sidebar.remote.heading', { name: group.label })}
             </span>
-            <span className="shrink-0 text-[10px] text-faint">{remoteEntries.length}</span>
+            <span className="shrink-0 text-[10px] text-faint">{group.entries.length}</span>
           </button>
           {remoteOpen && (
             <div className="max-h-48 overflow-y-auto pb-1">
-              {remoteEntries.map((entry) => {
-                const selected = activeRemoteRef?.roomId === entry.roomId
+              {group.entries.map((entry) => {
+                const selected = activeRemoteRef?.roomId === entry.roomId &&
+                  (entry.ref ? activeRemoteRef.peer === entry.ref.peer : true)
                 return (
                   <button
                     key={entry.key}
@@ -904,7 +915,7 @@ export function Sidebar(): React.JSX.Element {
             </div>
           )}
         </div>
-      )}
+      ))}
 
       {/* Archived sessions (collapsible) */}
       {archivedList.length > 0 && (

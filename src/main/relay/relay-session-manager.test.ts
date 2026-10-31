@@ -516,3 +516,26 @@ test('a text-only prompt carries no images key at all', async () => {
   // The Pi branches on presence, so an empty array would take the image path.
   assert.equal('images' in (transport.lastSent?.message as object), false)
 })
+
+test('a room announced by a second machine is kept, not dropped as foreign', async () => {
+  // With two pairings the relay speaks for both machines on ONE socket. The
+  // frame filter rejects anything whose peer is not the SELECTED agent, which is
+  // right for a reply aimed at us and wrong for a lifecycle push describing
+  // another paired machine — its rooms then never enter the roster, so the
+  // sidebar shows nothing from that machine even though it is running sessions.
+  const transport = new ScriptedTransport()
+  const manager = new RelaySessionManager({
+    transport,
+    initialAgent: { pubkey: PI_PUBKEY, agentName: 'desktop', roomId: '9NsvFIsyNlTH', pairedAt: '2026-10-30T00:00:00.000Z' },
+    initialAgents: [
+      { pubkey: PI_PUBKEY, agentName: 'desktop', roomId: '9NsvFIsyNlTH', pairedAt: '2026-10-30T00:00:00.000Z' },
+      { pubkey: OTHER_PUBKEY, agentName: 'other', roomId: null, pairedAt: '2026-10-30T00:00:00.000Z' },
+    ],
+  })
+  await manager.connect()
+  transport.deliver({ type: 'room_announced', peer: OTHER_PUBKEY, room_id: 'HELMETROOM01', name: 'HelmetOverlayNG', cwd: 'F:\\repos\\HelmetOverlaysNG', working: true }, OTHER_PUBKEY)
+  const rooms = manager.getState().rooms
+  assert.equal(rooms.length, 1, 'the other machine\u2019s room must be listed')
+  assert.equal(rooms[0]?.room_id, 'HELMETROOM01')
+  assert.equal(rooms[0]?.peer, OTHER_PUBKEY, 'and attributed to that machine')
+})
