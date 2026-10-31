@@ -79,7 +79,8 @@
       "notificationFallback": "通知",
       "selectFallbackTitle": "选择",
       "showWithShortcut": "显示（{{shortcut}}）",
-      "waitingForAnswer": "Pi 正在等待回答"
+      "waitingForAnswer": "Pi 正在等待回答",
+      "fromSession": "来自 {{session}} 的提问"
     },
     "insertNote": {
       "ariaLabel": "插入笔记",

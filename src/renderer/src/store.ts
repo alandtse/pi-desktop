@@ -432,6 +432,7 @@ interface AppState {
    * instead of the asking one is dropped by the relay in silence.
    */
   remotePromptIds: Record<string, RemotePromptOrigin>
+
   // Fire-and-forget notify toast. Its own slot so a toast can never clobber
   // an unanswered blocking dialog (and vice versa); both can be on screen.
   extensionNotify: PiExtensionUiRequest | null
@@ -1837,6 +1838,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
     todoState: null,
   extensionNotify: null,
   remotePromptIds: {},
+
   pendingPromptCounts: {},
   workspaceActivity: {},
   workflowRuns: [],
@@ -5110,6 +5112,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
         // carries the MACHINE as well as the room, because with several Pis
         // paired the asking one is not always the selected one.
         remotePromptIds: { ...get().remotePromptIds, [frame.id]: origin },
+
       })
       return
     }

@@ -8,6 +8,7 @@ import {
   isDialogToggleKey,
   splitPromptText,
 } from './extension-ui-dialog-helpers'
+import { promptOriginLabel } from '../prompt-origin-label'
 import { isImeComposing } from '../utils/ime-composing'
 import { AskFlowDialog } from './ask-flow-dialog'
 
@@ -33,6 +34,8 @@ export function ExtensionUiDialog(): React.JSX.Element | null {
   const cancelAskFlow = useAppStore((state) => state.cancelAskFlow)
   const dismissExtensionUi = useAppStore((state) => state.dismissExtensionUi)
   const dismissExtensionNotify = useAppStore((state) => state.dismissExtensionNotify)
+  const remotePromptIds = useAppStore((state) => state.remotePromptIds)
+  const sessionList = useAppStore((state) => state.sessionList)
 
   // Temporary hide (issue #61): the prompt stays unanswered in the store while
   // the user reads the chat behind it. Keyed by request id so a new prompt is
@@ -73,9 +76,14 @@ export function ExtensionUiDialog(): React.JSX.Element | null {
   // Dialog slot: the store routes only select/confirm/input/editor here. A
   // hidden prompt stays mounted (only its overlay is display:none) so text the
   // user already typed into an input or editor survives the hide.
+  //
+  // A remote prompt can arrive from a session other than the one on screen, so
+  // the header names its origin. A local prompt has no origin by definition and
+  // its label is null, which leaves the header exactly as it was.
+  const originLabel = request ? promptOriginLabel(remotePromptIds[request.id], sessionList) : null
   const dialog = ((): React.JSX.Element | null => {
     if (!request) return null
-    const frame = { onCancel: dismissExtensionUi, onHide: hide, hidden }
+    const frame = { onCancel: dismissExtensionUi, onHide: hide, hidden, origin: originLabel }
     // A pi-ask flow carries every question in one request and accepts exactly one
     // structured answer. Rendering it as the flat select would answer only the
     // first question, which pi-ask rejects as a partial flow.
@@ -86,6 +94,7 @@ export function ExtensionUiDialog(): React.JSX.Element | null {
             prompt={request.ask.title ?? request.title ?? t('chat.extensionUi.selectFallbackTitle')}
             onCancel={() => cancelAskFlow(request.id)}
             onHide={hide}
+            origin={originLabel}
             wide
           >
             <AskFlowDialog
@@ -211,6 +220,8 @@ interface DialogFrameProps {
   onCancel: () => void
   onHide: () => void
   hidden: boolean
+  /** The session that asked, when it is not the one on screen. */
+  origin: string | null
 }
 
 function SelectDialog({
@@ -219,6 +230,7 @@ function SelectDialog({
   onCancel,
   onHide,
   hidden,
+  origin,
 }: DialogFrameProps & {
   request: { id: string; title?: string; options?: string[]; timeout?: number }
   onSelect: (value: string) => void
@@ -226,7 +238,12 @@ function SelectDialog({
   const { t } = useTranslation()
   return (
     <DialogOverlay hidden={hidden} onBackdropClick={onHide}>
-      <DialogBox prompt={request.title ?? t('chat.extensionUi.selectFallbackTitle')} onCancel={onCancel} onHide={onHide}>
+      <DialogBox
+        prompt={request.title ?? t('chat.extensionUi.selectFallbackTitle')}
+        onCancel={onCancel}
+        onHide={onHide}
+        origin={origin}
+      >
         <div className="space-y-1">
           {(request.options ?? []).map((option) => (
             <button
@@ -253,6 +270,7 @@ function ConfirmDialog({
   onCancel,
   onHide,
   hidden,
+  origin,
 }: DialogFrameProps & {
   request: { id: string; title?: string; message?: string }
   onConfirm: () => void
@@ -261,7 +279,12 @@ function ConfirmDialog({
   const { t } = useTranslation()
   return (
     <DialogOverlay hidden={hidden} onBackdropClick={onHide}>
-      <DialogBox prompt={request.title ?? t('common.confirm')} onCancel={onCancel} onHide={onHide}>
+      <DialogBox
+        prompt={request.title ?? t('common.confirm')}
+        onCancel={onCancel}
+        onHide={onHide}
+        origin={origin}
+      >
         {request.message && <PromptBody text={request.message} />}
         <div className="flex justify-end gap-2">
           <button
@@ -309,6 +332,7 @@ function InputDialog({
   onCancel,
   onHide,
   hidden,
+  origin,
 }: DialogFrameProps & {
   request: { id: string; title?: string; placeholder?: string }
   onSubmit: (value: string) => void
@@ -318,7 +342,12 @@ function InputDialog({
 
   return (
     <DialogOverlay hidden={hidden} onBackdropClick={onHide}>
-      <DialogBox prompt={request.title ?? t('chat.extensionUi.inputFallbackTitle')} onCancel={onCancel} onHide={onHide}>
+      <DialogBox
+        prompt={request.title ?? t('chat.extensionUi.inputFallbackTitle')}
+        onCancel={onCancel}
+        onHide={onHide}
+        origin={origin}
+      >
         <input
           type="text"
           placeholder={readableHint(request.placeholder)}
@@ -357,6 +386,7 @@ function EditorDialog({
   onCancel,
   onHide,
   hidden,
+  origin,
 }: DialogFrameProps & {
   request: { id: string; title?: string; prefill?: string }
   onSubmit: (value: string) => void
@@ -366,7 +396,13 @@ function EditorDialog({
 
   return (
     <DialogOverlay hidden={hidden} onBackdropClick={onHide}>
-      <DialogBox prompt={request.title ?? t('chat.extensionUi.editFallbackTitle')} onCancel={onCancel} onHide={onHide} wide>
+      <DialogBox
+        prompt={request.title ?? t('chat.extensionUi.editFallbackTitle')}
+        onCancel={onCancel}
+        onHide={onHide}
+        origin={origin}
+        wide
+      >
         <textarea
           value={value}
           onChange={(e) => setValue(e.target.value)}
@@ -484,12 +520,15 @@ function DialogBox({
   children,
   onCancel,
   onHide,
+  origin,
   wide,
 }: {
   prompt: string
   children: React.ReactNode
   onCancel: () => void
   onHide?: () => void
+  // Which session asked, when it is not the one on screen.
+  origin?: string | null
   wide?: boolean
 }): React.JSX.Element {
   const { t } = useTranslation()
@@ -503,7 +542,14 @@ function DialogBox({
     >
       {/* Header */}
       <div className="flex items-start justify-between gap-3 border-b border-border px-4 py-3">
-        <h3 className="min-w-0 break-words text-sm font-medium text-primary">{heading}</h3>
+        <div className="min-w-0">
+          <h3 className="min-w-0 break-words text-sm font-medium text-primary">{heading}</h3>
+          {origin ? (
+            <p className="mt-0.5 min-w-0 break-words font-mono text-[11px] text-dim">
+              {t('chat.extensionUi.fromSession', { session: origin })}
+            </p>
+          ) : null}
+        </div>
         <div className="flex shrink-0 items-center gap-2">
           {onHide && (
             <button

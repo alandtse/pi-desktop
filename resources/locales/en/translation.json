@@ -79,7 +79,8 @@
       "notificationFallback": "Notification",
       "selectFallbackTitle": "Select",
       "showWithShortcut": "Show ({{shortcut}})",
-      "waitingForAnswer": "Pi is waiting for an answer"
+      "waitingForAnswer": "Pi is waiting for an answer",
+      "fromSession": "Asked by {{session}}"
     },
     "insertNote": {
       "ariaLabel": "Insert note",

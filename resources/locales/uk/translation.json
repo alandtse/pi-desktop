@@ -79,7 +79,8 @@
       "notificationFallback": "Сповіщення",
       "selectFallbackTitle": "Вибрати",
       "showWithShortcut": "Показати ({{shortcut}})",
-      "waitingForAnswer": "Pi чекає на відповідь"
+      "waitingForAnswer": "Pi чекає на відповідь",
+      "fromSession": "Запитує {{session}}"
     },
     "insertNote": {
       "ariaLabel": "Вставити нотатку",

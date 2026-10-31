@@ -79,7 +79,8 @@
       "notificationFallback": "Уведомление",
       "selectFallbackTitle": "Выбрать",
       "showWithShortcut": "Показать ({{shortcut}})",
-      "waitingForAnswer": "Pi ждёт ответа"
+      "waitingForAnswer": "Pi ждёт ответа",
+      "fromSession": "Спрашивает {{session}}"
     },
     "insertNote": {
       "ariaLabel": "Вставить заметку",
