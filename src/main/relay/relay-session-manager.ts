@@ -469,10 +469,18 @@ export class RelaySessionManager extends EventEmitter {
    * holds until pi-ask's 10-minute flow TTL expires and then reports failure, so
    * a dropped response is a lost turn rather than a prompt to resend.
    */
-  async respondExtensionUi(requestId: string, response: RelayExtensionUiResponseBody): Promise<void> {
+  async respondExtensionUi(
+    requestId: string,
+    response: RelayExtensionUiResponseBody,
+    peer?: string,
+  ): Promise<void> {
     const id = typeof requestId === 'string' ? requestId.trim() : ''
     if (!id) throw new Error('An interactive response needs the request id it answers')
-    const target = this.requirePaired()
+    // The prompt names the machine that asked: with several Pis paired, the
+    // machine this desktop happens to have selected is not necessarily the one
+    // blocked on an answer, and an answer sent to the wrong peer is dropped by
+    // the relay without a word — the asking turn then waits out its whole TTL.
+    const target = this.requirePaired(peer)
     await this.ensureConnected()
     const message = { ...response, type: 'extension_ui_response', id } as RelayExtensionUiResponse
     if (!this.options.transport.send(message, target)) {
@@ -516,7 +524,14 @@ export class RelaySessionManager extends EventEmitter {
     return selected
   }
 
-  private requirePaired(): RelayTarget {
+  private requirePaired(peer?: string): RelayTarget {
+    // An explicit peer is honoured even when it is not the selected machine: an
+    // answer goes back to whoever raised the prompt, not to the room on screen.
+    if (peer) {
+      const machine = this.state.agents.find((candidate) => candidate.pubkey === peer)
+      if (!machine) throw new Error('That machine is no longer paired')
+      return { peer: machine.pubkey, room: machine.roomId }
+    }
     const agent = this.state.agent
     if (!agent) throw new Error('This desktop is not paired with a Pi yet')
     return { peer: agent.pubkey, room: agent.roomId }

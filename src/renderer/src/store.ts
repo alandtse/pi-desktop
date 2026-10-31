@@ -113,6 +113,21 @@ import {
 
 export type { DisplayAttachment, DisplayMessage } from './message-parsing'
 
+// ─── Remote Prompt Origin ────────────────────────────────────────────────────
+
+/**
+ * Where a remote interactive prompt came from.
+ *
+ * Both halves are needed to answer it. The relay addresses frames by the exact
+ * `(peer, room)` pair, so a response carrying only the room would go to whichever
+ * machine this desktop happens to have selected — and be dropped, leaving the asking
+ * turn to wait out its whole TTL.
+ */
+export interface RemotePromptOrigin {
+  peer: string
+  roomId: string
+}
+
 // ─── Preview Target ──────────────────────────────────────────────────────────
 
 /**
@@ -410,11 +425,13 @@ interface AppState {
   /**
    * Remote request ids this desktop is answering over the relay.
    *
-   * Keyed by request id and valued by the room it came from. The dialog slot is
-   * shared with the local Pi, so the answer path needs to know which transport
-   * a visible prompt belongs to.
+   * Keyed by request id and valued by the machine AND room that asked. The
+   * dialog slot is shared with the local Pi, so the answer path needs to know
+   * which transport a visible prompt belongs to. The machine matters as much as
+   * the room: with several Pis paired, answering to the selected machine
+   * instead of the asking one is dropped by the relay in silence.
    */
-  remotePromptIds: Record<string, string>
+  remotePromptIds: Record<string, RemotePromptOrigin>
   // Fire-and-forget notify toast. Its own slot so a toast can never clobber
   // an unanswered blocking dialog (and vice versa); both can be on screen.
   extensionNotify: PiExtensionUiRequest | null
@@ -3938,13 +3955,14 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
     // A remote prompt is answered over the relay, never through the local ui
     // channel: the local id namespace belongs to this machine's Pi and a stray
     // answer there would resolve an unrelated turn.
-    if (remotePromptIds[id]) {
+    const origin = remotePromptIds[id]
+    if (origin) {
       const payload =
         extensionUiRequest.method === 'confirm'
           ? { confirmed: !!response.confirmed }
           : { value: String(response.value ?? '') }
       void window.piDesktop.relay
-        .respondExtensionUi(id, payload as never)
+        .respondExtensionUi(id, payload as never, origin.peer)
         .catch((error: unknown) => {
           get().addMessage({
             id: generateId(),
@@ -4017,9 +4035,14 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
     }
     // Only a remote flow is answerable here: the local TUI owns its own dialog,
     // and a second submitter would race it for the single response pi-ask accepts.
-    if (!remotePromptIds[id]) return
+    const origin = remotePromptIds[id]
+    if (!origin) return
     void window.piDesktop.relay
-      .respondExtensionUi(id, { ask: { flow_id: flowId, kind: 'answer', mode, answers } })
+      .respondExtensionUi(
+        id,
+        { ask: { flow_id: flowId, kind: 'answer', mode, answers } },
+        origin.peer,
+      )
       .catch((error: unknown) => {
         get().addMessage({
           id: generateId(),
@@ -4042,9 +4065,10 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
     const { extensionUiRequest, remotePromptIds } = get()
     if (!extensionUiRequest || extensionUiRequest.id !== id) return
     const flowId = extensionUiRequest.ask?.flow_id
-    if (flowId && remotePromptIds[id]) {
+    const origin = remotePromptIds[id]
+    if (flowId && origin) {
       void window.piDesktop.relay
-        .respondExtensionUi(id, { ask: { flow_id: flowId, kind: 'cancel' } })
+        .respondExtensionUi(id, { ask: { flow_id: flowId, kind: 'cancel' } }, origin.peer)
         .catch((error: unknown) => {
           get().addMessage({
             id: generateId(),
@@ -4067,12 +4091,13 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
   dismissExtensionUi: () => {
     const { extensionUiRequest, remotePromptIds } = get()
     if (extensionUiRequest) {
-      if (remotePromptIds[extensionUiRequest.id]) {
+      const origin = remotePromptIds[extensionUiRequest.id]
+      if (origin) {
         // Cancelling a remote prompt must say so explicitly: an empty
         // value would be read as a real answer and the turn would proceed on
         // input the user never gave.
         void window.piDesktop.relay
-          .respondExtensionUi(extensionUiRequest.id, { cancelled: true })
+          .respondExtensionUi(extensionUiRequest.id, { cancelled: true }, origin.peer)
           .catch((error: unknown) => {
             get().addMessage({
               id: generateId(),
@@ -5040,11 +5065,17 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
    */
   handleRelayFrame: (event) => {
     const active = get().activeRemoteRef
-    if (!active) return
-    if (event.roomId && active.roomId && event.roomId !== active.roomId) return
     const frame = event.frame
 
     if (frame.type === 'extension_ui_request') {
+      // Reaches the dialog whatever room is on screen and whatever this desktop
+      // is doing locally. A prompt is not transcript: dropping it because the
+      // user is looking elsewhere leaves the paired Pi blocked on an answer
+      // nobody was asked for, and the whole flow dies at its TTL.
+      const origin: RemotePromptOrigin = {
+        peer: event.peer || active?.peer || '',
+        roomId: event.roomId || active?.roomId || '',
+      }
       // The paired Pi blocks on `ask_user` until exactly one answer arrives, so
       // this prompt must reach the same dialog the local path uses. `notify` is
       // fire-and-forget and belongs in the toast slot, never the blocking one.
@@ -5075,11 +5106,18 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
         },
         // A remote prompt is answered over the relay, so the answer path has to
         // know which one this is. The id alone is not enough: a local request
-        // with the same id must not be answered over the relay.
-        remotePromptIds: { ...get().remotePromptIds, [frame.id]: active.roomId },
+        // with the same id must not be answered over the relay. The origin
+        // carries the MACHINE as well as the room, because with several Pis
+        // paired the asking one is not always the selected one.
+        remotePromptIds: { ...get().remotePromptIds, [frame.id]: origin },
       })
       return
     }
+
+    // Everything below is transcript for one room, so it keeps the room guard:
+    // appending another room’s output would type into the chat on screen.
+    if (!active) return
+    if (event.roomId && active.roomId && event.roomId !== active.roomId) return
 
     switch (frame.type) {
       case 'agent_chunk': {

@@ -60,7 +60,16 @@ export interface RelayManagerLike {
   runAction?(action: string, payload?: { provider?: string; modelId?: string; level?: string }): Promise<void>
   listModels?(): Promise<{ models: WireModel[]; current?: WireModel }>
   /** Optional so a manager fake that predates interactive prompts still fits. */
-  respondExtensionUi?(requestId: string, response: RelayExtensionUiResponseBody): Promise<void>
+  /**
+   * The optional `peer` names the machine that asked. With several Pis paired,
+   * the selected one is not necessarily the one blocked on a prompt, and an
+   * answer addressed to the wrong peer is dropped without a word.
+   */
+  respondExtensionUi?(
+    requestId: string,
+    response: RelayExtensionUiResponseBody,
+    peer?: string,
+  ): Promise<void>
   getState(): RelayManagerState
   /** Reports every internal state change, including roster pushes and room adoption. */
   onChange(listener: (state: RelayManagerState) => void): () => void
@@ -344,6 +353,7 @@ export class RelaySessionBridge {
   async respondExtensionUi(
     requestId: string,
     response: RelayExtensionUiResponseBody,
+    peer?: string,
   ): Promise<void> {
     const manager = this.requireManager()
     // Optional in the interface so a manager built before this channel existed
@@ -352,7 +362,7 @@ export class RelaySessionBridge {
     if (!manager.respondExtensionUi) {
       throw new Error('This relay connection cannot answer interactive prompts')
     }
-    await manager.respondExtensionUi(requestId, response)
+    await manager.respondExtensionUi(requestId, response, peer)
   }
 
   /** Called once at startup: connect only if the user has already configured a relay. */
@@ -424,7 +434,13 @@ export class RelaySessionBridge {
     this.unsubscribeFrames = manager.onMessage?.((frame, meta) => {
       // `pair_ok`/`pair_error` settle a paired request and never reach here, so
       // anything arriving is either a broadcast or a reply we did not ask for.
-      const event: RelayFrameEvent = { roomId: meta.room || this.manager?.getState().agent?.roomId || '', frame }
+      const event: RelayFrameEvent = {
+        roomId: meta.room || this.manager?.getState().agent?.roomId || '',
+        // Carried so an interactive prompt can be answered to the machine that
+        // raised it rather than to the selected one.
+        peer: meta.peer || this.manager?.getState().agent?.pubkey || '',
+        frame,
+      }
       for (const listener of this.frameListeners) listener(event)
     }) ?? null
     try {

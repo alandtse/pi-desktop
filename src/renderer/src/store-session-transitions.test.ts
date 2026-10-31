@@ -22,6 +22,12 @@ import type { PreviewTarget } from './store'
 // Each recorded call is appended to `calls`, so tests can assert both that a
 // session change reached Pi and that nothing reached Pi when it was declined.
 const calls: string[] = []
+
+/** Answers this desktop sent over the relay, in order. */
+const respondPayloads: unknown[] = []
+
+/** The machine every relay frame in this file comes from. */
+const PEER = 'PEERKEY'
 let switchResult: { success?: boolean; error?: string } | SessionRuntimeInfo | null = { success: true }
 // Non-null makes the stubbed workspace.setActive reject, simulating a switch
 // that never commits on the main side.
@@ -243,6 +249,11 @@ const piDesktopStub = {
       calls.push('relayCancel')
       return { ok: true }
     },
+    respondExtensionUi: async (id: string, response: unknown, peer?: string) => {
+      calls.push(`relayRespond:${id}:${peer ?? '-'}`)
+      respondPayloads.push(response)
+      return { ok: true }
+    },
   },
   commands: {
     abort: async () => {
@@ -369,6 +380,7 @@ function answerConfirm(confirmed: boolean): void {
 beforeEach(() => {
   remoteSessionRows = []
   relaySessionCalls = 0
+  respondPayloads.length = 0
   if (answerPoll !== null) {
     clearInterval(answerPoll)
     answerPoll = null
@@ -2574,10 +2586,10 @@ test('a remote turn streams into the visible transcript', async () => {
   assert.equal(afterSend.at(-1)?.content, 'what changed?')
   assert.equal(useAppStore.getState().isStreaming, true)
 
-  useAppStore.getState().handleRelayFrame({ roomId: 'ROOMID', frame: { type: 'agent_chunk', delta: 'ACK' } })
+  useAppStore.getState().handleRelayFrame({ peer: PEER, roomId: 'ROOMID', frame: { type: 'agent_chunk', delta: 'ACK' } })
   assert.equal(useAppStore.getState().streamingContent, 'ACK')
 
-  useAppStore.getState().handleRelayFrame({ roomId: 'ROOMID', frame: { type: 'agent_done' } })
+  useAppStore.getState().handleRelayFrame({ peer: PEER, roomId: 'ROOMID', frame: { type: 'agent_done' } })
   const state = useAppStore.getState()
   assert.equal(state.streamingContent, '', 'the stream buffer is cleared once committed')
   assert.equal(state.isStreaming, false, 'the turn is over')
@@ -2594,7 +2606,7 @@ test('frames from another room never reach the visible transcript', async () => 
     streamingContent: '',
   })
 
-  useAppStore.getState().handleRelayFrame({ roomId: 'OTHERROOM', frame: { type: 'agent_chunk', delta: 'leak' } })
+  useAppStore.getState().handleRelayFrame({ peer: PEER, roomId: 'OTHERROOM', frame: { type: 'agent_chunk', delta: 'leak' } })
 
   assert.equal(useAppStore.getState().streamingContent, '')
   assert.equal(useAppStore.getState().messages.length, 0)
@@ -2631,10 +2643,11 @@ test('an error frame from the remote turn is shown instead of a silent empty rep
   })
 
   useAppStore.getState().handleRelayFrame({
+    peer: PEER,
     roomId: 'ROOMID',
     frame: { type: 'error', code: 'provider_error', message: 'Provider error' },
   })
-  useAppStore.getState().handleRelayFrame({ roomId: 'ROOMID', frame: { type: 'agent_done' } })
+  useAppStore.getState().handleRelayFrame({ peer: PEER, roomId: 'ROOMID', frame: { type: 'agent_done' } })
 
   const state = useAppStore.getState()
   const system = state.messages.filter((m) => m.role === 'system')
@@ -2649,6 +2662,7 @@ test('a compaction on the remote session is reported in the chat', async () => {
   useAppStore.setState({ activeRemoteRef: { peer: 'PEERKEY', roomId: 'ROOMID' }, messages: [] })
 
   useAppStore.getState().handleRelayFrame({
+    peer: PEER,
     roomId: 'ROOMID',
     frame: { type: 'compaction', summary: 'earlier turns', tokens_before: 90000 },
   })
@@ -2664,6 +2678,7 @@ test('a turn cancelled on the other machine stops the stream here too', async ()
   })
 
   useAppStore.getState().handleRelayFrame({
+    peer: PEER,
     roomId: 'ROOMID',
     frame: { type: 'cancelled', in_reply_to: 'REQ', target_id: 'ROOMID' },
   })
@@ -3476,4 +3491,97 @@ test('output from another chat never reaches the one on screen', () => {
     'unstamped work',
     'an event with no source is treated as this chat',
   )
+})
+
+test('a prompt raised by another room still reaches the dialog', async () => {
+  // The reported defect: a session asking for input was only answerable while it
+  // was the session on screen. A prompt is not transcript — dropping it because
+  // the user is looking elsewhere leaves the paired Pi blocked on an answer
+  // nobody was asked for, and pi-ask kills the flow at its TTL.
+  useAppStore.setState({
+    activeRemoteRef: { peer: PEER, roomId: 'ROOMID' },
+    extensionUiRequest: null,
+    messages: [],
+  })
+
+  useAppStore.getState().handleRelayFrame({
+    peer: PEER,
+    roomId: 'SOME-OTHER-ROOM',
+    frame: { type: 'extension_ui_request', id: 'ask-1', method: 'confirm', title: 'Allow write?', message: 'write a file' },
+  })
+
+  const request = useAppStore.getState().extensionUiRequest
+  assert.equal(request?.id, 'ask-1', 'a prompt from another room must open the dialog')
+  assert.equal(request?.method, 'confirm')
+})
+
+test('a prompt is answerable to the machine that asked, not the selected one', async () => {
+  // Two Pis paired: the dialog names the asking machine, and an answer addressed
+  // to the selected machine instead would be dropped by the relay in silence.
+  const ASKING = 'ASKING-PEER-KEY'
+  useAppStore.setState({
+    activeRemoteRef: { peer: 'SELECTED-PEER-KEY', roomId: 'ROOMID' },
+    extensionUiRequest: null,
+    messages: [],
+  })
+
+  useAppStore.getState().handleRelayFrame({
+    peer: ASKING,
+    roomId: 'ROO',
+    frame: { type: 'extension_ui_request', id: 'ask-2', method: 'confirm', title: 'Allow?', message: 'm' },
+  })
+  useAppStore.getState().respondExtensionUi('ask-2', { confirmed: true })
+
+  assert.deepEqual(calls.filter((call) => call.startsWith('relayRespond:')), [
+    `relayRespond:ask-2:${ASKING}`,
+  ])
+})
+
+test('a prompt is shown even with no remote session open at all', async () => {
+  // The paired Pi can ask while this desktop is in a LOCAL chat. The dialog slot
+  // is shared, so the request must land there rather than being discarded for
+  // want of an active remote session.
+  useAppStore.setState({
+    activeRemoteRef: null,
+    extensionUiRequest: null,
+    messages: [],
+  })
+
+  useAppStore.getState().handleRelayFrame({
+    peer: PEER,
+    roomId: 'ROOMID',
+    frame: { type: 'extension_ui_request', id: 'ask-3', method: 'input', title: 'Name?', placeholder: 'x' },
+  })
+
+  assert.equal(useAppStore.getState().extensionUiRequest?.id, 'ask-3')
+  useAppStore.getState().respondExtensionUi('ask-3', { value: 'typed' })
+  assert.deepEqual(respondPayloads, [{ value: 'typed' }])
+  assert.deepEqual(calls.filter((call) => call.startsWith('relayRespond:')), [`relayRespond:ask-3:${PEER}`])
+})
+
+test('remote transcript from another room is still not appended', async () => {
+  // The guard that must survive: only prompts cross the room boundary. Output
+  // from a background room would otherwise type into the chat on screen.
+  useAppStore.setState({
+    activeRemoteRef: { peer: PEER, roomId: 'ROOMID' },
+    streamingContent: '',
+    isStreaming: false,
+    messages: [],
+  })
+
+  useAppStore.getState().handleRelayFrame({
+    peer: PEER,
+    roomId: 'SOME-OTHER-ROOM',
+    frame: { type: 'agent_chunk', delta: 'leaked' },
+  })
+  useAppStore.getState().handleRelayFrame({
+    peer: PEER,
+    roomId: 'SOME-OTHER-ROOM',
+    frame: { type: 'agent_done' },
+  })
+
+  const state = useAppStore.getState()
+  assert.equal(state.streamingContent, '', 'another room must not stream into this one')
+  assert.equal(state.isStreaming, false)
+  assert.equal(state.messages.length, 0)
 })

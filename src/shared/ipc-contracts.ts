@@ -1611,6 +1611,15 @@ export interface RelayOpenResult {
  */
 export interface RelayFrameEvent {
   roomId: string
+  /**
+   * The paired machine that sent this frame.
+   *
+   * Required because a frame carrying an interactive prompt must be answered to
+   * the machine that ASKED, not to whichever machine happens to be selected —
+   * with several Pis paired those differ, and the relay drops an answer
+   * addressed to the wrong peer without telling anyone.
+   */
+  peer: string
   frame: import('./relay-protocol').RelayServerMessage
 }
 

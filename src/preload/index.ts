@@ -331,9 +331,15 @@ interface PiDesktopAPI {
      * is the one the Pi sent; send exactly the discriminated fields for that
      * prompt's method, or `ask` for a rich pi-ask flow.
      */
+    /**
+     * `peer` names the machine that asked. With several Pis paired the
+     * selected one may not be the one blocked on the prompt, and an answer
+     * addressed to the wrong machine is dropped by the relay without a word.
+     */
     respondExtensionUi(
       requestId: string,
       response: RelayExtensionUiResponseBody,
+      peer?: string,
     ): Promise<{ ok: true }>
     action(
       name: RelayActionName,
@@ -692,8 +698,8 @@ const api: PiDesktopAPI = {
     sendPrompt: (text: string, options?: { images?: WireImage[]; steer?: boolean }) =>
       ipcRenderer.invoke(IPC_CHANNELS.RELAY_SEND_PROMPT, text, options),
     cancel: () => ipcRenderer.invoke(IPC_CHANNELS.RELAY_CANCEL),
-    respondExtensionUi: (requestId: string, response: RelayExtensionUiResponseBody) =>
-      ipcRenderer.invoke(IPC_CHANNELS.RELAY_RESPOND_EXTENSION_UI, requestId, response),
+    respondExtensionUi: (requestId: string, response: RelayExtensionUiResponseBody, peer?: string) =>
+      ipcRenderer.invoke(IPC_CHANNELS.RELAY_RESPOND_EXTENSION_UI, requestId, response, peer),
     /** Runs a typed action (new session, compact, set model, set thinking). */
     action: (name: RelayActionName, payload?: { provider?: string; modelId?: string; level?: string }) =>
       ipcRenderer.invoke(IPC_CHANNELS.RELAY_ACTION, name, payload),

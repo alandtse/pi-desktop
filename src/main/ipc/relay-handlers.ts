@@ -150,13 +150,20 @@ function registerRelayDriveHandlers(bridge: RelaySessionBridge): void {
 
   ipcMain.handle(
     IPC_CHANNELS.RELAY_RESPOND_EXTENSION_UI,
-    async (event, requestId: unknown, response: unknown) => {
+    async (event, requestId: unknown, response: unknown, peer: unknown) => {
       assertTrustedSender(event)
       if (typeof requestId !== 'string' || !requestId.trim()) {
         throw new Error('An interactive response needs the request id it answers')
       }
       const validated = validateExtensionUiResponse(response)
-      await bridge.respondExtensionUi(requestId.trim(), validated)
+      // The peer names the machine that asked, which is not necessarily the one
+      // selected: an answer sent to the wrong machine is dropped by the relay and
+      // the asking turn then waits out its whole TTL.
+      await bridge.respondExtensionUi(
+        requestId.trim(),
+        validated,
+        typeof peer === 'string' && peer.trim() ? peer.trim() : undefined,
+      )
       return { ok: true as const }
     },
   )
