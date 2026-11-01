@@ -12,6 +12,7 @@ export const GUI_DATA_FILES = [
   'notes.json',
   'session-auto-tags.json',
   'session-tags.json',
+  'project-sessions.json',
   'settings.json',
   'workspaces.json',
 ] as const

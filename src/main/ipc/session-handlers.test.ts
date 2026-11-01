@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { createRequire } from 'node:module'
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, utimes, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { IpcContext } from './context'
@@ -186,17 +186,46 @@ test('the resume target is the project runtime session, else its newest used fil
       JSON.stringify({ type: 'message', message: { role: 'user', content: 'hi' } }),
     ].join('\n'))
     let current: { sessionPath: string | null } | null = null
+    // The real manager over this test's temp GUI data dir, so the record is
+    // written and read through the same file the app uses.
+    const { ProjectSessionMemory } = await import('../project-session-memory')
+    const projectSessions = new ProjectSessionMemory()
     registerSessionHandlers({
       workspaceManager: {
         getActiveWorkspace: () => ({ id: 'workspace', path: project }),
         getWorkspaces: () => [{ id: 'workspace', path: project }],
         getWorkspaceSessionRuntime: (id: string) => id === 'workspace' ? current : null,
       },
+      projectSessions,
     } as unknown as IpcContext)
     const resumeTarget = handlers.get(IPC_CHANNELS.SESSION_RESUME_TARGET)!
     const { saveAppSettings } = await import('./settings')
 
-    assert.equal(await resumeTarget(null, project), onDisk)
+    // A chat the user actually opened, recorded as this project's choice. It is
+    // written FIRST, so a "newest file" rule would pick the other one.
+    const chosenDir = join(root, 'sessions', sanitizePath(project))
+    const chosen = join(chosenDir, 'chosen.jsonl')
+    await writeFile(chosen, [
+      JSON.stringify({ type: 'session', id: 'chosen', cwd: project }),
+      JSON.stringify({ type: 'message', message: { role: 'user', content: 'picked' } }),
+    ].join('\n'))
+    // Backdated so `last.jsonl` really is the newest file: the point is that the
+    // record wins against a NEWER file the user never opened.
+    const older = new Date(Date.now() - 60_000)
+    await utimes(chosen, older, older)
+
+    assert.equal(await resumeTarget(null, project), onDisk, 'no record yet: the newest file')
+    await projectSessions.remember(project, chosen)
+    assert.equal(
+      await resumeTarget(null, project),
+      chosen,
+      'a recorded chat beats the newest file, which may be one nobody opened',
+    )
+    // A record outlives the file it names: a deleted session must fall through
+    // rather than open an empty chat.
+    await rm(chosen)
+    assert.equal(await resumeTarget(null, project), onDisk, 'a dead record falls back')
+    await projectSessions.forget(project)
     await saveAppSettings({ resumeLastSession: false })
     assert.equal(await resumeTarget(null, project), null, 'the setting off never resumes a file')
     assert.equal(await resumeTarget(null, join(root, 'unregistered')), null)
@@ -261,3 +290,4 @@ test('a new chat gets its own worktree only when it asks for one', async () => {
     await rm(root, { recursive: true, force: true })
   }
 })
+

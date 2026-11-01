@@ -76,7 +76,7 @@ async function deleteSessionFile(sessionPath: string): Promise<SessionDeleteResu
 }
 
 export function registerSessionHandlers(ctx: IpcContext): void {
-  const { workspaceManager, getActivePi, tagManager, archivedSessions } = ctx
+  const { workspaceManager, getActivePi, tagManager, archivedSessions, projectSessions } = ctx
 
   const startRuntime = async (runtime: SessionRuntimeInfo, sessionPath?: string): Promise<void> => {
     const settings = await loadAppSettings(workspaceManager)
@@ -147,6 +147,12 @@ export function registerSessionHandlers(ctx: IpcContext): void {
     if (!workspace) throw new Error(t('errors.workspace.noneActive'))
     if (cwd && !pathsEqual(workspace.path, cwd)) throw new Error(t('errors.session.projectMismatch'))
     const runtime = await workspaceManager.activateSession(workspace.id, sessionPath)
+    // Every explicit session bind funnels through here, so this is where the
+    // project's memory of "the chat I was last on" belongs. Recorded before the
+    // engine starts: the choice is the user's whether or not the process comes
+    // up. Memory is an enhancement, so a context without it (older callers) or a
+    // failed write must never block the switch itself.
+    void projectSessions?.remember(workspace.path, sessionPath).catch(() => undefined)
     if (runtime.status !== 'running' && runtime.status !== 'starting') {
       void startRuntime(runtime, sessionPath).catch(() => undefined)
     }
@@ -239,6 +245,14 @@ export function registerSessionHandlers(ctx: IpcContext): void {
     // a restart: only this one session starts again.
     const settings = await loadAppSettings(workspaceManager)
     if (!settings.resumeLastSession) return null
+    // The chat this project was last SHOWING beats the newest file on disk. The
+    // newest file is frequently one the user never opened — written by another
+    // tool, or by a session whose tab was closed — so resuming it landed the
+    // project tab somewhere other than where the user left it. Verified to exist
+    // first: a record outlives a deleted session, and a dead path must fall
+    // through rather than open an empty chat.
+    const remembered = await projectSessions?.get(workspace.path).catch(() => null)
+    if (remembered && isWithinSessionRoots(remembered) && existsSync(remembered)) return remembered
     return findLatestProjectSession(await engineProjectSessionDirs(getConfiguredEngineKind(), workspace.path))
   })
 

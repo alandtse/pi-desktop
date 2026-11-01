@@ -3,6 +3,7 @@ import { PiRpcManager } from '../pi-rpc-manager'
 import { WorkspaceManager } from '../workspace-manager'
 import { SessionTagManager } from '../session-tags'
 import { ArchivedSessionsManager } from '../archived-sessions'
+import { ProjectSessionMemory } from '../project-session-memory'
 import { TerminalService } from '../terminal-service'
 import { WorkspaceTerminals } from '../workspace-terminals'
 import { NotesManager } from '../notes-manager'
@@ -17,6 +18,8 @@ export interface IpcContext {
   approvedAttachmentPaths: Set<string>
   tagManager: SessionTagManager
   archivedSessions: ArchivedSessionsManager
+  /** Which session each project was last showing. */
+  projectSessions: ProjectSessionMemory
   notesManager: NotesManager
   terminalService: WorkspaceTerminals
   globalDictationShortcut: GlobalDictationShortcut
@@ -25,6 +28,7 @@ export interface IpcContext {
 export function createIpcContext(workspaceManager: WorkspaceManager): IpcContext {
   const tagManager = new SessionTagManager()
   const archivedSessions = new ArchivedSessionsManager()
+  const projectSessions = new ProjectSessionMemory()
   const terminalService = new WorkspaceTerminals(() => new TerminalService())
   workspaceManager.onWorkspaceRemoved((workspaceId) => terminalService.stop(workspaceId))
   const notesManager = new NotesManager()
@@ -64,6 +68,7 @@ export function createIpcContext(workspaceManager: WorkspaceManager): IpcContext
     approvedAttachmentPaths,
     tagManager,
     archivedSessions,
+    projectSessions,
     notesManager,
     terminalService,
     globalDictationShortcut,
