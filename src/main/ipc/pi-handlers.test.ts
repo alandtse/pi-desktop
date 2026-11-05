@@ -74,9 +74,11 @@ test('a session restart keeps the model chosen in the GUI', async () => {
     const { saveAppSettings } = await import('./settings')
     await saveAppSettings({ defaultProvider: 'chosen-provider', defaultModel: 'chosen-model' })
 
-    await handlers.get(IPC_CHANNELS.PI_RESTART)!(null)
+    // Explicitly start fresh; default startup resumes the current session, whose
+    // model history must not be overridden by global defaults.
+    await handlers.get(IPC_CHANNELS.PI_RESTART)!(null, { continueSession: false })
 
-    // without it the engine runs its own default model, which may be one the user cannot use
+    // without the saved defaults the engine runs its own model, which may be unusable
     const args = buildPiArgs(restarts[0])
     assert.equal(args[args.indexOf('--provider') + 1], 'chosen-provider')
     assert.equal(args[args.indexOf('--model') + 1], 'chosen-model')
