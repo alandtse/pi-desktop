@@ -24,7 +24,7 @@ import {
 } from './chat-panel-widths'
 import { ReviewRail } from './review-rail'
 
-import { groupToolMessages, prepareChatMessages } from '../message-grouping'
+import { groupToolMessages, prepareChatMessages } from '../../../shared/chat/message-grouping'
 import { latestNextSteps } from '../next-steps'
 import { NextStepsBar } from './next-steps-bar'
 import { NowContext } from '../utils/relative-time'

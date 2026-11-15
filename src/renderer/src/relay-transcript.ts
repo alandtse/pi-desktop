@@ -8,7 +8,7 @@
  * thing that differs is where the bytes came from.
  */
 import type { RelaySessionEvent } from '../../shared/relay-protocol'
-import type { DisplayMessage } from './message-parsing'
+import type { DisplayMessage } from '../../shared/chat/message-parsing'
 
 /** Shapes the Pi emits inside `session_history.events`; unknown kinds are skipped. */
 interface RelayUserInput {

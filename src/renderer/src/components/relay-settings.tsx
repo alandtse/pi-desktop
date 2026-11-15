@@ -91,7 +91,7 @@ export function RelaySettings(): React.JSX.Element {
         setNotice(t('settings.relay.pair.renamed'))
         return next
       }),
-    [run, aliasDraft, t],
+    [run, aliasDraft, status?.settings.pairedAgent?.pubkey, t],
   )
 
   const unpair = useCallback(

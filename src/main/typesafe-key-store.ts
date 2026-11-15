@@ -1,11 +1,10 @@
-import { mkdir, rename, rm, writeFile } from 'fs/promises'
+import { rm } from 'fs/promises'
 import { readFileSync } from 'fs'
-import { dirname } from 'path'
 import { TYPESAFE_API_KEY_ENV, normalizeTypeSafeApiKey } from '../shared/typesafe'
 import { getGuiDataPath } from './app-data-paths'
+import { writeOwnerOnlyFile } from './owner-only-file'
 
 const TYPESAFE_KEY_FILE = 'typesafe-api-key'
-const OWNER_ONLY_MODE = 0o600
 
 /**
  * The user's TypeSafe API key, in its own owner-only file in the GUI data
@@ -35,20 +34,7 @@ export class TypeSafeKeyStore {
     const key = normalizeTypeSafeApiKey(raw)
     if (!key) return false
 
-    const path = this.resolvePath()
-    const tempPath = `${path}.${process.pid}.tmp`
-    await mkdir(dirname(path), { recursive: true })
-    // A fresh temp file is created owner-only and renamed over the target, so
-    // the key is never readable by others, even for a moment, and a crash
-    // never leaves half a key.
-    try {
-      await writeFile(tempPath, `${key}\n`, { mode: OWNER_ONLY_MODE })
-      await rename(tempPath, path)
-    } catch (err) {
-      // Never leave a stray copy of the key behind.
-      await rm(tempPath, { force: true })
-      throw err
-    }
+    await writeOwnerOnlyFile(this.resolvePath(), `${key}\n`)
     this.cached = key
     return true
   }

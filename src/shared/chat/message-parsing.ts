@@ -1,5 +1,5 @@
-import { t } from '../../shared/i18n'
-import { isStoppedAnswer } from '../../shared/stopped-answer'
+import { t } from '../i18n'
+import { isStoppedAnswer } from '../stopped-answer'
 import { splitClaudeCliMarkers } from './claude-cli-markers'
 
 export interface DisplayAttachment {

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { PROMPT_HISTORY_LIMIT, promptHistoryFrom } from './prompt-history'
-import type { DisplayMessage } from './message-parsing'
+import type { DisplayMessage } from '../../shared/chat/message-parsing'
 
 const user = (content: string): DisplayMessage => ({ id: content, role: 'user', content, timestamp: 0 })
 const assistant = (content: string): DisplayMessage => ({ id: content, role: 'assistant', content, timestamp: 0 })

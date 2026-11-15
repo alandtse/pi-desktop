@@ -50,11 +50,11 @@
     },
     "composer": {
       "placeholderIdle": "Ask {{agent}} anything — / for commands",
+      "placeholderLoading": "Type now — this chat is still loading, and your message is sent once it opens",
       "placeholderNotRunning": "{{agent}} agent is not running...",
       "placeholderQueue": "Type to queue a message — Ctrl+Enter sends it now",
       "placeholderRemote": "Ask the session on {{name}} anything — / for commands",
-      "placeholderStarting": "Type now — {{agent}} is starting, and your message is sent when it is ready",
-      "placeholderLoading": "Type now — this chat is still loading, and your message is sent once it opens"
+      "placeholderStarting": "Type now — {{agent}} is starting, and your message is sent when it is ready"
     },
     "council": {
       "planWithCouncil": "Plan with Council",
@@ -74,13 +74,13 @@
       "askRequired": "Answer the required questions to continue",
       "askSubmit": "Submit answers",
       "editFallbackTitle": "Edit",
+      "fromSession": "Asked by {{session}}",
       "hideForNowWithShortcut": "Hide for now ({{shortcut}})",
       "inputFallbackTitle": "Input",
       "notificationFallback": "Notification",
       "selectFallbackTitle": "Select",
       "showWithShortcut": "Show ({{shortcut}})",
-      "waitingForAnswer": "Pi is waiting for an answer",
-      "fromSession": "Asked by {{session}}"
+      "waitingForAnswer": "Pi is waiting for an answer"
     },
     "insertNote": {
       "ariaLabel": "Insert note",
@@ -91,6 +91,10 @@
     "mentionPopup": {
       "insertHint": "↑↓ navigate · Enter/Tab insert path · Esc close"
     },
+    "mesh": {
+      "from": "From {{from}}",
+      "unknownSender": "From an unnamed peer"
+    },
     "message": {
       "branchedFrom": "Branched from: \"{{excerpt}}\"",
       "branchFromHere": "Branch from here",
@@ -99,6 +103,9 @@
     },
     "nextSteps": {
       "title": "Suggested next steps"
+    },
+    "pairing": {
+      "expiresAt": "Code valid until {{time}}"
     },
     "projectPicker": {
       "noProject": "No project",
@@ -180,6 +187,13 @@
       "renderSvg": "Render SVG",
       "viewSource": "View source"
     },
+    "todo": {
+      "allDone": "{{n}} done",
+      "hide": "Hide the task list",
+      "remaining": "{{n}} left of {{total}}",
+      "title": "Tasks",
+      "toggle": "Show or hide the task list"
+    },
     "toolbar": {
       "diffViewer": "Diff viewer",
       "fileTree": "File tree",
@@ -204,21 +218,7 @@
       "stopTitle": "Stop and insert text",
       "transcribing": "Transcribing your voice"
     },
-    "waitingForResponse": "Waiting for response...",
-    "pairing": {
-      "expiresAt": "Code valid until {{time}}"
-    },
-    "todo": {
-      "title": "Tasks",
-      "toggle": "Show or hide the task list",
-      "remaining": "{{n}} left of {{total}}",
-      "allDone": "{{n}} done",
-      "hide": "Hide the task list"
-    },
-    "mesh": {
-      "from": "From {{from}}",
-      "unknownSender": "From an unnamed peer"
-    }
+    "waitingForResponse": "Waiting for response..."
   },
   "commandGroups": {
     "commands": "Commands",
@@ -1342,6 +1342,11 @@
       "description": "Notify when Pi finishes, fails, or waits for approval in a workspace you are not looking at",
       "label": "Desktop Notifications"
     },
+    "keepSystemAwake": {
+      "description": "Stop this computer from going to sleep while Pi Desktop runs. The screen can still turn off. A closed laptop lid still puts the computer to sleep.",
+      "label": "Keep This Computer Awake",
+      "unsupported": "Pi Desktop cannot block sleep on this system. It found no power manager and no systemd sleep lock."
+    },
     "language": {
       "description": "Language of menus, buttons, and messages",
       "label": "Language",
@@ -1613,8 +1618,8 @@
     },
     "sessionNamePlaceholder": "Session name",
     "sessionRow": {
-      "remoteBadge": "Session on {{host}}",
       "meshLiveBadge": "Session on this machine, reachable from other paired machines",
+      "remoteBadge": "Session on {{host}}",
       "tooltipActive": "{{title}}\n\nClick to open · double-click to rename · right-click for actions",
       "tooltipInactive": "{{title}}\n\nClick to open · right-click for actions"
     },

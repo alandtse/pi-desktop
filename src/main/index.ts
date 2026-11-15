@@ -19,6 +19,7 @@ import { activityStatsStore } from './activity-stats'
 import { configureGuiDataDir, getCanonicalUserDataDir, getExternalGuiDataDir, migrateLegacyGuiData } from './app-data-paths'
 import { setupTray, setTrayEnabled, isTrayEnabled, isTrayAvailable, destroyTray, notifyFirstHide } from './tray-manager'
 import { shouldHideToTray } from './tray-decision'
+import { applyKeepAwake } from './keep-awake-service'
 import { createEditorGuard } from './editor-guard'
 import { appLog } from './app-log'
 import { IPC_CHANNELS } from '../shared/ipc-contracts'
@@ -564,6 +565,9 @@ app.whenReady().then(async () => {
     },
   })
   setTrayEnabled(settings.minimizeToTrayOnClose)
+  void applyKeepAwake(settings.keepSystemAwake).catch((err) => {
+    appLog.error('power', 'Failed to apply the keep-awake setting', err)
+  })
 
   // Warm the package catalog cache in the background so the Catalog tab is
   // instant when first opened. Non-blocking; failures are ignored (offline etc).

@@ -21,7 +21,7 @@ import type {
   SessionRuntimeInfo,
   Workspace,
 } from '../../shared/ipc-contracts'
-import type { DisplayMessage } from './message-parsing'
+import type { DisplayMessage } from '../../shared/chat/message-parsing'
 
 const WORKSPACE: Workspace = {
   id: 'one', name: 'One', path: '/tmp/one', color: '#000', createdAt: 0, lastActiveAt: 0,

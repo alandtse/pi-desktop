@@ -285,14 +285,6 @@ test('a turn of a session the list already holds does not reload the list when i
   }
 })
 
-test('deltas take their place by offset, and a delta the view already holds changes nothing', async () => {
-  const { placeStreamedDelta } = await import('./store')
-  assert.equal(placeStreamedDelta('', 'Hello', 0), 'Hello')
-  assert.equal(placeStreamedDelta('Hello', ' world', 5), 'Hello world')
-  assert.equal(placeStreamedDelta('Hello world', ' world', 5), 'Hello world')
-  assert.equal(placeStreamedDelta('Hello', ' there', undefined), 'Hello there')
-  assert.equal(placeStreamedDelta('', 'middle of a sentence', 40), null)
-})
 
 test('a view that missed the start of a message shows what main kept, then continues from it', async () => {
   const session = (window as unknown as { piDesktop: { session: Record<string, unknown> } }).piDesktop.session

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { NEXT_STEPS_DEVICE_PATH, NEXT_STEPS_TOOL_NAME } from '../../../resources/next-steps'
-import type { DisplayMessage } from './message-parsing'
+import type { DisplayMessage } from '../../shared/chat/message-parsing'
 import { isNextStepsCall, latestNextSteps, mayBeNextStepsCall, withoutNextStepsCalls } from './next-steps'
 
 const ADD_TESTS = { label: 'Add tests', prompt: 'Add tests for calc.py.' }

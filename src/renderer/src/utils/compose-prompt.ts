@@ -1,6 +1,6 @@
 import type { PromptImage } from '../../../shared/ipc-contracts'
 import { formatAttachedFile } from '../../../shared/untrusted-data'
-import type { DisplayAttachment } from '../message-parsing'
+import type { DisplayAttachment } from '../../../shared/chat/message-parsing'
 import type { ComposerAttachment } from '../store'
 
 // Framing for inlined text attachments: the file content is data, not part of

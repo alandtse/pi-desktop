@@ -1,4 +1,4 @@
-import type { DisplayMessage } from './message-parsing'
+import type { DisplayMessage } from '../../shared/chat/message-parsing'
 
 /** Same cap the composer's recall list used before it became per-tab. */
 export const PROMPT_HISTORY_LIMIT = 200

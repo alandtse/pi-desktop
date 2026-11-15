@@ -22,7 +22,7 @@ import {
   editStats,
   splitReadTruncationNote,
   type EditBlock,
-} from '../message-grouping'
+} from '../../../shared/chat/message-grouping'
 import { toolCallIconFor } from './tool-call-icon'
 import { getCodeEditorLanguageName } from './code-editor-language'
 import { highlightCodeToHtml } from './chat-code-highlight'

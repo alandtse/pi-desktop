@@ -50,11 +50,11 @@
     },
     "composer": {
       "placeholderIdle": "Задайте завдання для {{agent}} — / для команд",
+      "placeholderLoading": "Пишіть зараз — чат ще завантажується, повідомлення надішлеться, коли він відкриється",
       "placeholderNotRunning": "Агент {{agent}} не запущений…",
       "placeholderQueue": "Повідомлення в чергу — Ctrl+Enter надішле одразу",
       "placeholderRemote": "Запитайте сеанс на {{name}} — / для команд",
-      "placeholderStarting": "Можна писати — {{agent}} запускається, повідомлення надійде, коли він буде готовий",
-      "placeholderLoading": "Пишіть зараз — чат ще завантажується, повідомлення надішлеться, коли він відкриється"
+      "placeholderStarting": "Можна писати — {{agent}} запускається, повідомлення надійде, коли він буде готовий"
     },
     "council": {
       "planWithCouncil": "Планування з радою",
@@ -74,13 +74,13 @@
       "askRequired": "Дайте відповіді на обов’язкові питання, щоб продовжити",
       "askSubmit": "Надіслати відповіді",
       "editFallbackTitle": "Змінити",
+      "fromSession": "Запитує {{session}}",
       "hideForNowWithShortcut": "Поки приховати ({{shortcut}})",
       "inputFallbackTitle": "Введення",
       "notificationFallback": "Сповіщення",
       "selectFallbackTitle": "Вибрати",
       "showWithShortcut": "Показати ({{shortcut}})",
-      "waitingForAnswer": "Pi чекає на відповідь",
-      "fromSession": "Запитує {{session}}"
+      "waitingForAnswer": "Pi чекає на відповідь"
     },
     "insertNote": {
       "ariaLabel": "Вставити нотатку",
@@ -91,6 +91,10 @@
     "mentionPopup": {
       "insertHint": "↑↓ навігація · Enter/Tab вставити шлях · Esc закрити"
     },
+    "mesh": {
+      "from": "Від {{from}}",
+      "unknownSender": "Від невідомого вузла"
+    },
     "message": {
       "branchedFrom": "Відгалуження від: «{{excerpt}}»",
       "branchFromHere": "Створити відгалуження звідси",
@@ -99,6 +103,9 @@
     },
     "nextSteps": {
       "title": "Пропоновані кроки"
+    },
+    "pairing": {
+      "expiresAt": "Код дійсний до {{time}}"
     },
     "projectPicker": {
       "noProject": "Без проєкту",
@@ -194,6 +201,13 @@
       "renderSvg": "Показати SVG",
       "viewSource": "Вихідний код"
     },
+    "todo": {
+      "allDone": "Готово: {{n}}",
+      "hide": "Приховати список завдань",
+      "remaining": "Залишилося {{n}} з {{total}}",
+      "title": "Завдання",
+      "toggle": "Показати або сховати список завдань"
+    },
     "toolbar": {
       "diffViewer": "Перегляд змін",
       "fileTree": "Дерево файлів",
@@ -220,21 +234,7 @@
       "stopTitle": "Зупинити й вставити текст",
       "transcribing": "Розпізнавання мовлення"
     },
-    "waitingForResponse": "Очікування відповіді…",
-    "pairing": {
-      "expiresAt": "Код дійсний до {{time}}"
-    },
-    "todo": {
-      "title": "Завдання",
-      "toggle": "Показати або сховати список завдань",
-      "remaining": "Залишилося {{n}} з {{total}}",
-      "allDone": "Готово: {{n}}",
-      "hide": "Приховати список завдань"
-    },
-    "mesh": {
-      "from": "Від {{from}}",
-      "unknownSender": "Від невідомого вузла"
-    }
+    "waitingForResponse": "Очікування відповіді…"
   },
   "commandGroups": {
     "commands": "Команди",
@@ -1400,6 +1400,11 @@
       "description": "Сповіщати про завершення Pi, помилку або запит схвалення в іншому проєкті",
       "label": "Системні сповіщення"
     },
+    "keepSystemAwake": {
+      "description": "Не переводити цей комп’ютер у режим сну, поки працює Pi Desktop. Екран усе ще може вимикатися. Закриття кришки ноутбука й надалі переводить комп’ютер у режим сну.",
+      "label": "Не переводити комп’ютер у режим сну",
+      "unsupported": "Pi Desktop не може запобігти переходу системи в режим сну. Менеджер живлення та блокування сну systemd не знайдено."
+    },
     "language": {
       "description": "Мова меню, кнопок і повідомлень",
       "label": "Мова",
@@ -1675,8 +1680,8 @@
     },
     "sessionNamePlaceholder": "Назва сесії",
     "sessionRow": {
-      "remoteBadge": "Сеанс на {{host}}",
       "meshLiveBadge": "Сесія на цій машині, доступна з інших спарених машин",
+      "remoteBadge": "Сеанс на {{host}}",
       "tooltipActive": "{{title}}\n\nКлацання — відкрити · подвійне — перейменувати · правою кнопкою — дії",
       "tooltipInactive": "{{title}}\n\nКлацання — відкрити · правою кнопкою — дії"
     },

@@ -71,6 +71,7 @@ export const IPC_CHANNELS = {
   SEND_QUEUE_LOAD: 'send-queue:load',
   SEND_QUEUE_SAVE: 'send-queue:save',
   SETTINGS_SAVE: 'settings:save',
+  SETTINGS_KEEP_AWAKE_STATUS: 'settings:keep-awake-status',
   I18N_GET_ENVIRONMENT: 'i18n:get-environment',
 
   // Permission rules
@@ -1409,6 +1410,13 @@ export interface AgentDetectionOptions {
   force?: boolean
 }
 
+/**
+ * Whether the "keep this computer awake" setting holds on this system.
+ * `unsupported` means it is on but no sleep-block service was found, which
+ * can occur on a Linux desktop with neither a power manager nor systemd.
+ */
+export type KeepAwakeStatus = 'off' | 'active' | 'unsupported'
+
 export interface AppSettings {
   shortcuts: import('./keyboard-shortcuts').KeyboardShortcuts
   piExecutablePath: string
@@ -1478,6 +1486,12 @@ export interface AppSettings {
   // the app running in the background. Windows/Linux only; on macOS the window
   // close already keeps the app alive in the Dock (native equivalent).
   minimizeToTrayOnClose: boolean
+  // Stop the computer from going to idle sleep while Pi Desktop runs, so long
+  // agent runs finish and the machine stays reachable. The screen may still
+  // turn off. A closed laptop lid, a manual sleep command and a low battery
+  // stay under the operating system's control. `KeepAwakeStatus` reports
+  // whether this system can honor it.
+  keepSystemAwake: boolean
   // Internal: whether the one-time "still running in the tray" hint has been
   // shown. Not exposed in the Settings UI.
   hasSeenTrayHint: boolean

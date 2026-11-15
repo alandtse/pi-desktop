@@ -7,7 +7,7 @@ import {
   type SubagentTranscriptRef,
   type SubagentTranscriptResult,
 } from '../../shared/subagent-task'
-import { parseAgentMessage, type DisplayMessage } from './message-parsing'
+import { parseAgentMessage, type DisplayMessage } from '../../shared/chat/message-parsing'
 
 /**
  * What the Tasks panel's transcript view shows. `progress`: a foreground Pi

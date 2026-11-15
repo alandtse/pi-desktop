@@ -10,6 +10,7 @@ import type {
   AgentEngine,
   AgentInstallation,
   AppSettings,
+  KeepAwakeStatus,
   PermissionMode,
   CouncilConfig,
   PermissionRule,
@@ -146,6 +147,8 @@ export function SettingsPanel(): React.JSX.Element {
   const [openToHomeOnLaunch, setOpenToHomeOnLaunch] = useState(draft0.openToHomeOnLaunch ?? settings?.openToHomeOnLaunch ?? DEFAULT_SETTINGS.openToHomeOnLaunch)
   const [runOnStartup, setRunOnStartup] = useState(draft0.runOnStartup ?? settings?.runOnStartup ?? DEFAULT_SETTINGS.runOnStartup)
   const [minimizeToTrayOnClose, setMinimizeToTrayOnClose] = useState(draft0.minimizeToTrayOnClose ?? settings?.minimizeToTrayOnClose ?? DEFAULT_SETTINGS.minimizeToTrayOnClose)
+  const [keepSystemAwake, setKeepSystemAwake] = useState(draft0.keepSystemAwake ?? settings?.keepSystemAwake ?? DEFAULT_SETTINGS.keepSystemAwake)
+  const [keepAwakeStatus, setKeepAwakeStatus] = useState<KeepAwakeStatus>('off')
   const [permissionMode, setPermissionMode] = useState<PermissionMode>(
     draft0.permissionMode ?? settings?.permissionMode ?? DEFAULT_SETTINGS.permissionMode,
   )
@@ -299,6 +302,17 @@ export function SettingsPanel(): React.JSX.Element {
     await loadSettings()
   }
 
+  // The main process finishes taking or releasing the sleep block before a
+  // save returns, so the status is current each time the saved value changes.
+  const savedKeepSystemAwake = settings?.keepSystemAwake
+  useEffect(() => {
+    let cancelled = false
+    void window.piDesktop.settings.getKeepAwakeStatus().then((status) => {
+      if (!cancelled) setKeepAwakeStatus(status)
+    })
+    return () => { cancelled = true }
+  }, [savedKeepSystemAwake])
+
   // Populate the form once, when settings first load. We deliberately do NOT
   // re-sync on every settings change: the UI font previews live and the
   // terminal/editor sizes are staged in store state, so re-syncing would
@@ -335,6 +349,7 @@ export function SettingsPanel(): React.JSX.Element {
     setOpenToHomeOnLaunch(draft.openToHomeOnLaunch ?? settings.openToHomeOnLaunch)
     setRunOnStartup(draft.runOnStartup ?? settings.runOnStartup)
     setMinimizeToTrayOnClose(draft.minimizeToTrayOnClose ?? settings.minimizeToTrayOnClose)
+    setKeepSystemAwake(draft.keepSystemAwake ?? settings.keepSystemAwake)
     setPermissionMode(draft.permissionMode ?? settings.permissionMode)
     setLanguage(draft.language ?? settings.language)
   }, [settings])
@@ -596,6 +611,7 @@ export function SettingsPanel(): React.JSX.Element {
       openToHomeOnLaunch,
       runOnStartup,
       minimizeToTrayOnClose,
+      keepSystemAwake,
       permissionMode,
       language,
       shortcuts,
@@ -672,6 +688,7 @@ export function SettingsPanel(): React.JSX.Element {
       openToHomeOnLaunch: DEFAULT_SETTINGS.openToHomeOnLaunch,
       runOnStartup: DEFAULT_SETTINGS.runOnStartup,
       minimizeToTrayOnClose: DEFAULT_SETTINGS.minimizeToTrayOnClose,
+      keepSystemAwake: DEFAULT_SETTINGS.keepSystemAwake,
       permissionMode: DEFAULT_SETTINGS.permissionMode,
       language: DEFAULT_SETTINGS.language,
       shortcuts: DEFAULT_SETTINGS.shortcuts,
@@ -699,6 +716,7 @@ export function SettingsPanel(): React.JSX.Element {
     setOpenToHomeOnLaunch(defaults.openToHomeOnLaunch!)
     setRunOnStartup(defaults.runOnStartup!)
     setMinimizeToTrayOnClose(defaults.minimizeToTrayOnClose!)
+    setKeepSystemAwake(defaults.keepSystemAwake!)
     setPermissionMode(defaults.permissionMode!)
     setLanguage(defaults.language!)
     setScopeRules({ global: EMPTY_SCOPE_RULES, workspace: EMPTY_SCOPE_RULES })
@@ -1172,6 +1190,16 @@ export function SettingsPanel(): React.JSX.Element {
           >
             <Toggle checked={minimizeToTrayOnClose} onChange={(v) => { setMinimizeToTrayOnClose(v); void applyImmediate({ minimizeToTrayOnClose: v }) }} />
           </SettingsRow>
+
+          <SettingsRow
+            label={t('settings.keepSystemAwake.label')}
+            description={t('settings.keepSystemAwake.description')}
+          >
+            <Toggle checked={keepSystemAwake} onChange={(v) => { setKeepSystemAwake(v); void applyImmediate({ keepSystemAwake: v }) }} />
+          </SettingsRow>
+          {keepAwakeStatus === 'unsupported' && (
+            <div className="text-xs text-warning">{t('settings.keepSystemAwake.unsupported')}</div>
+          )}
         </SettingsSection>
 
         <SettingsSection title={t('settings.shortcuts.heading')}>

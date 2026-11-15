@@ -50,11 +50,11 @@
     },
     "composer": {
       "placeholderIdle": "向 {{agent}} 提问 — 输入 / 使用命令",
+      "placeholderLoading": "现在就可以输入 —— 会话仍在加载，打开后会自动发送",
       "placeholderNotRunning": "{{agent}} 智能体未在运行…",
       "placeholderQueue": "输入消息以加入队列 — Ctrl+Enter 立即发送",
       "placeholderRemote": "向 {{name}} 上的会话提问 — 输入 / 使用命令",
-      "placeholderStarting": "现在就能输入 — {{agent}} 正在启动，就绪后会自动发送",
-      "placeholderLoading": "现在就可以输入 —— 会话仍在加载，打开后会自动发送"
+      "placeholderStarting": "现在就能输入 — {{agent}} 正在启动，就绪后会自动发送"
     },
     "council": {
       "planWithCouncil": "使用委员会规划",
@@ -74,13 +74,13 @@
       "askRequired": "请回答必填问题以继续",
       "askSubmit": "提交答案",
       "editFallbackTitle": "编辑",
+      "fromSession": "来自 {{session}} 的提问",
       "hideForNowWithShortcut": "暂时隐藏（{{shortcut}}）",
       "inputFallbackTitle": "输入",
       "notificationFallback": "通知",
       "selectFallbackTitle": "选择",
       "showWithShortcut": "显示（{{shortcut}}）",
-      "waitingForAnswer": "Pi 正在等待回答",
-      "fromSession": "来自 {{session}} 的提问"
+      "waitingForAnswer": "Pi 正在等待回答"
     },
     "insertNote": {
       "ariaLabel": "插入笔记",
@@ -91,6 +91,10 @@
     "mentionPopup": {
       "insertHint": "↑↓ 选择 · Enter/Tab 插入路径 · Esc 关闭"
     },
+    "mesh": {
+      "from": "来自 {{from}}",
+      "unknownSender": "来自未命名对端"
+    },
     "message": {
       "branchedFrom": "分支自：“{{excerpt}}”",
       "branchFromHere": "从此处创建分支",
@@ -99,6 +103,9 @@
     },
     "nextSteps": {
       "title": "建议的后续步骤"
+    },
+    "pairing": {
+      "expiresAt": "代码有效期至 {{time}}"
     },
     "projectPicker": {
       "noProject": "无项目",
@@ -173,6 +180,13 @@
       "renderSvg": "渲染 SVG",
       "viewSource": "查看源码"
     },
+    "todo": {
+      "allDone": "已完成 {{n}}",
+      "hide": "隐藏任务列表",
+      "remaining": "剩余 {{n}} / {{total}}",
+      "title": "任务",
+      "toggle": "显示或隐藏任务列表"
+    },
     "toolbar": {
       "diffViewer": "差异查看器",
       "fileTree": "文件树",
@@ -196,21 +210,7 @@
       "stopTitle": "停止并插入文本",
       "transcribing": "正在转写你的语音"
     },
-    "waitingForResponse": "正在等待回答…",
-    "pairing": {
-      "expiresAt": "代码有效期至 {{time}}"
-    },
-    "todo": {
-      "title": "任务",
-      "toggle": "显示或隐藏任务列表",
-      "remaining": "剩余 {{n}} / {{total}}",
-      "allDone": "已完成 {{n}}",
-      "hide": "隐藏任务列表"
-    },
-    "mesh": {
-      "from": "来自 {{from}}",
-      "unknownSender": "来自未命名对端"
-    }
+    "waitingForResponse": "正在等待回答…"
   },
   "commandGroups": {
     "commands": "命令",
@@ -1313,6 +1313,11 @@
       "description": "当 Pi 在你未查看的工作区中完成、失败或等待批准时通知你",
       "label": "桌面通知"
     },
+    "keepSystemAwake": {
+      "description": "Pi Desktop 运行期间阻止此计算机进入睡眠。屏幕仍可关闭。合上笔记本盖子仍会使计算机睡眠。",
+      "label": "保持此计算机唤醒",
+      "unsupported": "Pi Desktop 无法在此系统上阻止睡眠。未找到电源管理器，也未找到 systemd 睡眠锁。"
+    },
     "language": {
       "description": "菜单、按钮和消息的语言",
       "label": "语言",
@@ -1582,8 +1587,8 @@
     },
     "sessionNamePlaceholder": "会话名称",
     "sessionRow": {
-      "remoteBadge": "{{host}} 上的会话",
       "meshLiveBadge": "此机器上的会话，可从其他已配对机器访问",
+      "remoteBadge": "{{host}} 上的会话",
       "tooltipActive": "{{title}}\n\n点击打开 · 双击重命名 · 右键查看操作",
       "tooltipInactive": "{{title}}\n\n点击打开 · 右键查看操作"
     },

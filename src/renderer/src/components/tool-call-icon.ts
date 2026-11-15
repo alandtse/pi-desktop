@@ -8,7 +8,7 @@ import {
   FolderTree,
   type LucideIcon,
 } from 'lucide-react'
-import { toolKind, type ToolKind } from '../message-grouping'
+import { toolKind, type ToolKind } from '../../../shared/chat/message-grouping'
 
 // Icon that mirrors a tool call's operation (a fetch shows a globe, a read a
 // document, etc.). Keyed off the same tool kind as toolCallLabel so icon and

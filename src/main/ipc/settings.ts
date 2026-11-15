@@ -11,6 +11,7 @@ import { normalizeStoredSettings } from '../../shared/app-settings'
 import { applyLanguageSetting, getI18nEnvironment, isPseudoLanguageEnabled } from '../i18n'
 import { applyRunOnStartup } from '../startup-launch'
 import { setTrayEnabled } from '../tray-manager'
+import { applyKeepAwake, getKeepAwakeStatus } from '../keep-awake-service'
 import { readFile, writeFile, mkdir } from 'fs/promises'
 import { join } from 'path'
 import { existsSync } from 'fs'
@@ -104,6 +105,12 @@ export function registerSettingsHandlers(ctx: IpcContext): void {
     if ('minimizeToTrayOnClose' in settings) {
       setTrayEnabled(Boolean((settings as Partial<AppSettings>).minimizeToTrayOnClose))
     }
+    // Reflect a "keep awake" change immediately: take or release the sleep
+    // block so the new setting applies without a restart. Awaited so the
+    // status the Settings panel reads next is already the new one.
+    if ('keepSystemAwake' in settings) {
+      await applyKeepAwake(Boolean((settings as Partial<AppSettings>).keepSystemAwake))
+    }
     // Re-resolve the Pi binary so a corrected executable path or explicit engine
     // takes effect on the next runtime start without relying on filename sniffing.
     const updated = await loadAppSettings(workspaceManager)
@@ -118,6 +125,8 @@ export function registerSettingsHandlers(ctx: IpcContext): void {
     }
     return updated
   })
+
+  ipcMain.handle(IPC_CHANNELS.SETTINGS_KEEP_AWAKE_STATUS, () => getKeepAwakeStatus())
 
   ipcMain.handle(IPC_CHANNELS.I18N_GET_ENVIRONMENT, () => getI18nEnvironment())
 

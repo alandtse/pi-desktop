@@ -10,6 +10,7 @@ import type {
   SessionDeleteResult,
   ArchivedSessionsMap,
   AppSettings,
+  KeepAwakeStatus,
   AgentDetectionOptions,
   AgentInstallationsResult,
   Workspace,
@@ -181,6 +182,7 @@ interface PiDesktopAPI {
   settings: {
     getAll(): Promise<AppSettings>
     save(settings: Partial<AppSettings>): Promise<AppSettings>
+    getKeepAwakeStatus(): Promise<KeepAwakeStatus>
   }
 
   // Interface language
@@ -574,6 +576,7 @@ const api: PiDesktopAPI = {
   settings: {
     getAll: () => ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_GET_ALL),
     save: (settings) => ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_SAVE, settings),
+    getKeepAwakeStatus: () => ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_KEEP_AWAKE_STATUS),
   },
 
   i18n: {

@@ -18,13 +18,22 @@ import {
 } from './send-queue'
 import { promptHistoryFrom } from './prompt-history'
 import { moveProjectTab, projectTabs, readProjectTabOrder, rememberProjectTabOrder } from './utils/tab-navigation'
-import { parseAgentMessage, type DisplayAttachment, type DisplayMessage } from './message-parsing'
+import { parseAgentMessage, type DisplayAttachment, type DisplayMessage } from '../../shared/chat/message-parsing'
 import { relayEventsToDisplayMessages } from './relay-transcript'
-import { isStoppedAnswer } from '../../shared/stopped-answer'
 import { stripAnsi } from './utils/strip-ansi'
 import { createStaleGuard } from './utils/stale-guard'
-import { splitClaudeCliMarkers } from './claude-cli-markers'
-import { markUnansweredToolCallsRunning, settleRunningToolCall } from './reattached-tool-calls'
+import { markUnansweredToolCallsRunning } from '../../shared/chat/reattached-tool-calls'
+import type { SubagentProgress } from '../../shared/chat/subagent-progress'
+import {
+  applyMessageUpdate,
+  applyToolEnd,
+  applyToolStart,
+  applyToolUpdate,
+  applyTurnComplete,
+  turnErrorText,
+  type ChatStreamClock,
+  type StreamingToolCall,
+} from '../../shared/chat/chat-stream'
 import type { PiCommand } from '../../shared/pi-command'
 import type { InterruptedReason } from '../../shared/interrupted-turn'
 import { continuationPrompt } from '../../shared/interrupted-turn'
@@ -111,7 +120,7 @@ import {
   promptRanWithoutAgent, promptRefusal, promptResultRefusal, reportsNoAgentRun, reportsPromptOutcome,
 } from '../../shared/ipc-contracts'
 
-export type { DisplayAttachment, DisplayMessage } from './message-parsing'
+export type { DisplayAttachment, DisplayMessage } from '../../shared/chat/message-parsing'
 
 // ─── Remote Prompt Origin ────────────────────────────────────────────────────
 
@@ -362,10 +371,7 @@ interface AppState {
   promptHistory: string[]
   streamingContent: string
   streamingThinking: string
-  streamingToolCalls: Map<
-    string,
-    { name: string; args: string; result?: string; isExecuting: boolean; isError?: boolean; startedAt?: number; durationMs?: number }
-  >
+  streamingToolCalls: Map<string, StreamingToolCall>
   isStreaming: boolean
   /**
    * History may be incomplete after a mid-turn attach or a snapshot racing
@@ -450,6 +456,8 @@ interface AppState {
   subagentEventsSupported: boolean
   // Row open in the Tasks panel's transcript view; null shows the list.
   selectedSubagentTaskId: string | null
+  // Live progress from shared chat-stream tool events; separate from OMP task lifecycle.
+  subagentProgress: SubagentProgress[]
 
   // App-level confirmation dialog (themed replacement for window.confirm)
   confirmRequest: ConfirmRequest | null
@@ -888,6 +896,9 @@ async function retryCommandCatalog(): Promise<boolean> {
   }
   return false
 }
+
+/** Real time and ids for the shared, pure stream assembly. */
+const chatClock: ChatStreamClock = { now: () => Date.now(), generateId }
 
 function normalizePiCommands(raw: unknown): PiCommand[] {
   if (!Array.isArray(raw)) return []
@@ -1845,7 +1856,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
   commands: [],
 
   extensionUiRequest: null,
-    todoState: null,
+  todoState: null,
   extensionNotify: null,
   remotePromptIds: {},
 
@@ -1856,6 +1867,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
   subagentTasks: [],
   subagentEventsSupported: false,
   selectedSubagentTaskId: null,
+  subagentProgress: [],
   confirmRequest: null,
 
   workspaces: [],
@@ -2102,6 +2114,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
       subagentTasks: [],
       subagentEventsSupported: false,
       selectedSubagentTaskId: null,
+      subagentProgress: [],
       ...idleTurnState(),
     })
   },
@@ -5355,18 +5368,6 @@ useAppStore.subscribe((state, prev) => {
 // Zustand set supports both object and callback forms
 type ZustandSet = (partial: Partial<AppState> | ((state: AppState) => Partial<AppState>)) => void
 
-/**
- * `current` with one streamed delta placed at its offset, or null when the
- * delta starts past the end of `current`: the view attached in the middle of
- * the message and missed its start. A delta `current` already holds (a
- * snapshot covered it) changes nothing; a delta without an offset appends.
- */
-export function placeStreamedDelta(current: string, delta: string, offset: number | undefined): string | null {
-  if (offset === undefined) return current + delta
-  if (offset > current.length) return null
-  return offset + delta.length <= current.length ? current : current.slice(0, offset) + delta
-}
-
 // Counts committed assistant messages, so a streamed-text snapshot requested
 // for one message is never applied to the next.
 let committedStreamCount = 0
@@ -5396,122 +5397,18 @@ function backfillStreamingText(get: () => AppState & AppActions, set: ZustandSet
     .finally(() => { streamingTextBackfill = null })
 }
 
-const STREAMED_DELTA_FIELDS = {
-  text_delta: 'streamingContent',
-  thinking_delta: 'streamingThinking',
-} as const satisfies Record<string, keyof AppState>
-
 function handleMessageUpdate(
   event: PiMessageUpdateEvent,
   set: ZustandSet,
   get: () => AppState & AppActions,
 ): void {
-  const { assistantMessageEvent } = event
-  // Start/delta events identify the call by its index in the partial message;
-  // only toolcall_end carries the finalized toolCall directly.
-  const partialContent = assistantMessageEvent.partial?.content
-  const toolCall = assistantMessageEvent.toolCall ?? (
-    Array.isArray(partialContent) && assistantMessageEvent.contentIndex !== undefined
-      ? partialContent[assistantMessageEvent.contentIndex] as Record<string, unknown> | undefined
-      : undefined
-  )
-
-  switch (assistantMessageEvent.type) {
-    case 'text_delta':
-    case 'thinking_delta': {
-      const field = STREAMED_DELTA_FIELDS[assistantMessageEvent.type]
-      let missedStart = false
-      set((state) => {
-        const placed = placeStreamedDelta(state[field], assistantMessageEvent.delta ?? '', assistantMessageEvent.offset)
-        if (placed !== null) return { [field]: placed }
-        missedStart = true
-        return {}
-      })
-      if (missedStart) backfillStreamingText(get, set)
-      break
-    }
-
-    case 'text_end':
-    case 'thinking_end':
-      // Content is finalized in message_end
-      break
-
-    case 'toolcall_start': {
-      if (toolCall) {
-        const callId = String(toolCall.id ?? '')
-        set((state) => {
-          const newMap = new Map(state.streamingToolCalls)
-          newMap.set(callId, {
-            name: String(toolCall.name ?? 'unknown'),
-            args: '',
-            isExecuting: true,
-            startedAt: Date.now(),
-          })
-          return { streamingToolCalls: newMap }
-        })
-      }
-      break
-    }
-
-    case 'toolcall_delta': {
-      if (toolCall?.id) {
-        set((state) => {
-          const newMap = new Map(state.streamingToolCalls)
-          const existing = newMap.get(String(toolCall.id))
-          if (existing) {
-            newMap.set(String(toolCall.id), {
-              ...existing,
-              args: existing.args + (assistantMessageEvent.delta ?? ''),
-            })
-          }
-          return { streamingToolCalls: newMap }
-        })
-      }
-      break
-    }
-
-    case 'toolcall_end': {
-      if (toolCall?.id) {
-        set((state) => {
-          const newMap = new Map(state.streamingToolCalls)
-          const existing = newMap.get(String(toolCall.id))
-          if (existing) {
-            newMap.set(String(toolCall.id), {
-              ...existing,
-              args: JSON.stringify(toolCall.arguments ?? existing.args),
-            })
-          }
-          return { streamingToolCalls: newMap }
-        })
-      }
-      break
-    }
-  }
-}
-
-// Pi and OMP report a plain user stop with exactly these texts; anything else
-// on an aborted turn is a specific reason worth showing (mirrors Pi's own TUI).
-// Not translated: they are compared against the engines' own (English)
-// output, never shown. The "Stopped" mark already tells the user.
-const GENERIC_ABORT_MESSAGES: ReadonlySet<string> = new Set([
-  'Request was aborted', // Pi
-  'Interrupted by user', // OMP
-])
-
-/**
- * Error text to surface in chat for a finished assistant message, or null.
- * A provider that rejects before streaming (e.g. HTTP 402) yields an
- * assistant message with stopReason 'error', empty content, and the provider
- * error in errorMessage — without this, the chat shows nothing at all.
- */
-function turnErrorText(message?: Record<string, unknown>): string | null {
-  if (!message || message.role !== 'assistant') return null
-  const errorMessage = typeof message.errorMessage === 'string' ? message.errorMessage : ''
-  if (message.stopReason === 'error') return errorMessage || t('store.messages.unknownError')
-  if (message.stopReason === 'aborted' && errorMessage && !GENERIC_ABORT_MESSAGES.has(errorMessage)) {
-    return errorMessage
-  }
-  return null
+  let missedStart = false
+  set((state) => {
+    const result = applyMessageUpdate(state, event, chatClock)
+    missedStart = result.missedStart
+    return result.patch
+  })
+  if (missedStart) backfillStreamingText(get, set)
 }
 
 function handleTurnComplete(
@@ -5520,87 +5417,7 @@ function handleTurnComplete(
   completeTools: boolean
 ): void {
   committedStreamCount += 1
-  set((state) => {
-    const newMessages = [...state.messages]
-    // Final messages contain the full body, including bytes emitted before a
-    // mid-turn attach. Deltas alone can only reconstruct the suffix we saw.
-    const final = !completeTools && Array.isArray(message?.content) ? parseAgentMessage(message) : null
-    const nativeIds = new Set((Array.isArray(message?.content) ? message.content : [])
-      .filter((block: Record<string, unknown>) => block?.type === 'toolCall')
-      .map((block: Record<string, unknown>) => block.id))
-    const pendingTools = new Map(state.streamingToolCalls)
-    for (const call of final?.toolCalls ?? []) {
-      if (!nativeIds.has(call.id)) continue
-      pendingTools.set(call.id, {
-        ...pendingTools.get(call.id), name: call.name, args: call.arguments,
-        isExecuting: pendingTools.get(call.id)?.isExecuting ?? true,
-      })
-    }
-    const text = final
-      ? { content: final.content, toolCalls: (final.toolCalls ?? []).filter((call) => !nativeIds.has(call.id)) }
-      : splitClaudeCliMarkers(state.streamingContent, state.sessionState?.model?.provider)
-    const thinking = final ? final.thinking : state.streamingThinking
-    // The assistant message ends before its tools execute. Keep their live
-    // state until turn_end so each call is committed only once, with its result.
-    const entries = completeTools ? Array.from(state.streamingToolCalls.entries()) : []
-    // turn_end re-delivers the ended message; only its message_end marks it.
-    const stopped = !completeTools && isStoppedAnswer(message)
-
-    // Commit streaming content as assistant message. A stopped answer is kept
-    // even when nothing streamed, so its "Stopped" notice still shows.
-    if (text.content || thinking || text.toolCalls.length > 0 || entries.length > 0 || stopped) {
-      const toolCalls = [
-        ...entries.map(([id, tc]) => ({
-          id,
-          name: tc.name,
-          arguments: tc.args,
-          result: tc.result,
-          isError: tc.isError,
-          isExecuting: false,
-          durationMs: tc.durationMs,
-        })),
-        ...text.toolCalls,
-      ]
-
-      // Prefer the model/provider Pi records on this specific message (the
-      // authoritative source, robust to mid-turn model switches); fall back to
-      // the currently-selected model when the event omits them.
-      const activeModel = state.sessionState?.model
-      const model = typeof message?.model === 'string' ? message.model : activeModel?.id
-      const provider = typeof message?.provider === 'string' ? message.provider : activeModel?.provider
-      newMessages.push({
-        id: generateId(),
-        role: 'assistant',
-        content: text.content,
-        timestamp: final?.timestamp ?? Date.now(),
-        thinking: thinking || undefined,
-        initiallyShowThinking: Boolean(state.streamingThinking),
-        toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
-        model,
-        provider,
-        stopped: stopped || undefined,
-      })
-
-      for (const [id, tc] of entries) {
-        if (!tc.result) continue
-        newMessages.push({
-          id: `${id}-result`,
-          role: 'toolResult',
-          content: tc.result,
-          timestamp: Date.now(),
-          toolCallId: id,
-          toolName: tc.name,
-        })
-      }
-    }
-
-    return {
-      messages: newMessages.length === state.messages.length ? state.messages : newMessages,
-      streamingContent: '',
-      streamingThinking: '',
-      streamingToolCalls: completeTools ? new Map() : pendingTools,
-    }
-  })
+  set((state) => applyTurnComplete(state, message, { completeTools, activeModel: state.sessionState?.model }, chatClock))
 }
 
 /**
@@ -5627,13 +5444,7 @@ function handleToolStart(
   set: ZustandSet
 ): void {
   set((state) => {
-    const newMap = new Map(state.streamingToolCalls)
-    newMap.set(event.toolCallId, {
-      name: event.toolName,
-      args: JSON.stringify(event.args),
-      isExecuting: true,
-      startedAt: Date.now(),
-    })
+    const patch = applyToolStart(state, event, chatClock)
     const subagentTasks = subagentTasksAfterTool(state, event.toolName, {
       toolCallId: event.toolCallId,
       args: event.args,
@@ -5641,7 +5452,7 @@ function handleToolStart(
       phase: 'start',
       isError: false,
     })
-    return subagentTasks ? { streamingToolCalls: newMap, subagentTasks } : { streamingToolCalls: newMap }
+    return subagentTasks ? { ...patch, subagentTasks } : patch
   })
 }
 
@@ -5649,19 +5460,8 @@ function handleToolUpdate(
   event: PiToolExecutionUpdateEvent,
   set: ZustandSet
 ): void {
-  const text = event.partialResult.content
-    .filter((c) => c.type === 'text')
-    .map((c) => c.text ?? '')
-    .join('')
-
   set((state) => {
-    const newMap = new Map(state.streamingToolCalls)
-    const existing = newMap.get(event.toolCallId)
-    newMap.set(event.toolCallId, {
-      ...(existing ?? { name: event.toolName, args: JSON.stringify(event.args), isExecuting: true }),
-      result: text || existing?.result,
-    })
-
+    const patch = applyToolUpdate(state, event)
     const subagentTasks = subagentTasksAfterTool(state, event.toolName, {
       toolCallId: event.toolCallId,
       args: event.args,
@@ -5669,7 +5469,7 @@ function handleToolUpdate(
       phase: 'update',
       isError: false,
     })
-    return subagentTasks ? { streamingToolCalls: newMap, subagentTasks } : { streamingToolCalls: newMap }
+    return subagentTasks ? { ...patch, subagentTasks } : patch
   })
 }
 
@@ -5677,24 +5477,8 @@ function handleToolEnd(
   event: PiToolExecutionEndEvent,
   set: ZustandSet
 ): void {
-  const resultText = event.result.content
-    .filter((c) => c.type === 'text')
-    .map((c) => c.text ?? '')
-    .join('')
-
   set((state) => {
-    const newMap = new Map(state.streamingToolCalls)
-    const existing = newMap.get(event.toolCallId)
-    if (existing) {
-      newMap.set(event.toolCallId, {
-        ...existing,
-        isExecuting: false,
-        isError: event.isError,
-        result: resultText || existing.result,
-        durationMs: existing.startedAt ? Date.now() - existing.startedAt : existing.durationMs,
-      })
-    }
-
+    const patch = applyToolEnd(state, event, chatClock)
     const subagentTasks = subagentTasksAfterTool(state, event.toolName, {
       toolCallId: event.toolCallId,
       args: undefined,
@@ -5702,13 +5486,7 @@ function handleToolEnd(
       phase: 'end',
       isError: event.isError,
     })
-
-    return {
-      streamingToolCalls: newMap,
-      ...(subagentTasks ? { subagentTasks } : {}),
-      // A tool that started before a mid-turn return lives only in history.
-      ...(existing ? {} : { messages: settleRunningToolCall(state.messages, event.toolCallId, event.isError) }),
-    }
+    return subagentTasks ? { ...patch, subagentTasks } : patch
   })
 }
 

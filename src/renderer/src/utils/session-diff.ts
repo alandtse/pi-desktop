@@ -1,7 +1,7 @@
 import { workspaceRelativeGitPath, type GitDiffPaths } from '../../../shared/git-diff'
 import { pathGroupKey } from '../../../shared/path-compare'
-import type { DisplayMessage } from '../message-parsing'
-import { toolCallFile, toolKind } from '../message-grouping'
+import type { DisplayMessage } from '../../../shared/chat/message-parsing'
+import { toolCallFile, toolKind } from '../../../shared/chat/message-grouping'
 
 function fileKey(path: string, workspacePath: string): string {
   const absolute = /^(?:[a-z]:[\\/]|[\\/])/i.test(path)

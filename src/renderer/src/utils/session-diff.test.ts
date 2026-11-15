@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import type { DisplayMessage } from '../message-parsing'
+import type { DisplayMessage } from '../../../shared/chat/message-parsing'
 import { filterSessionDiffFiles } from './session-diff'
 
 function call(name: string, args: unknown, extra = {}): DisplayMessage {
