@@ -9,6 +9,7 @@ import {
   ompRegistryQuery,
   ompUpdateInstallSpec,
   piRegistryQuery,
+  PI_UPDATE_ALL_ARGS,
   registryVersionUrl,
   type OmpRegistryQuery,
   type RegistryQuery,
@@ -17,6 +18,10 @@ import type { OmpNpmPlugin } from './omp-plugin-list'
 import { t } from '../shared/i18n'
 
 const HTTP_NOT_FOUND = 404
+
+test('Pi Update all updates both the CLI and its installed extensions without approving project files', () => {
+  assert.deepEqual(PI_UPDATE_ALL_ARGS, ['update', '--all', '--no-approve'])
+})
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })

@@ -27,6 +27,9 @@ const DIST_TAG_PATTERN = /^[A-Za-z][\w.-]*$/
 const FLOATING_RANGE_PATTERN = /^[\^~]\d/
 const OMP_MISSING_BUN_MARKER = 'Executable not found in $PATH: "bun"'
 
+/** Pi's built-in update command updates the CLI and all installed extensions. */
+export const PI_UPDATE_ALL_ARGS = ['update', '--all', '--no-approve'] as const
+
 /** A registry lookup: the package name and the dist-tag its update follows. */
 export interface RegistryQuery {
   name: string

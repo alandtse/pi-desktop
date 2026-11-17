@@ -15,6 +15,7 @@ import {
   OmpPluginListError,
   ompUpdateInstallSpec,
   piRegistryQuery,
+  PI_UPDATE_ALL_ARGS,
   type OmpNpmTarget,
   type OmpRegistryQuery,
   type UpdateCandidate,
@@ -70,7 +71,9 @@ export function registerPackageHandlers(ctx: IpcContext): void {
     assertTrustedSender(event)
     const ws = workspaceManager.getActiveWorkspace()
     const cwd = ws?.path ?? process.cwd()
-    return updateAllPackages(cwd, activeEngine())
+    const engine = activeEngine()
+    if (engine === 'pi') await waitForAgentRuntimesToStop(workspaceManager)
+    return updateAllPackages(cwd, engine)
   })
 
   ipcMain.handle(IPC_CHANNELS.PACKAGE_CHECK_UPDATES, async () => {
@@ -86,6 +89,15 @@ export function registerPackageHandlers(ctx: IpcContext): void {
 
 // ─── Package Management ──────────────────────────────────────────────────────
 
+/** Defer replacement of the CLI/package installation until no agent process uses it. */
+async function waitForAgentRuntimesToStop(workspaceManager: IpcContext['workspaceManager']): Promise<void> {
+  while (workspaceManager.getSessionRuntimes().some((runtime) =>
+    runtime.status === 'starting' || runtime.status === 'running'
+  )) {
+    await new Promise<void>((resolve) => setTimeout(resolve, 1_000))
+  }
+}
+
 const LIST_TIMEOUT_MS = 30_000
 const INSTALL_TIMEOUT_MS = 120_000
 const REMOVE_TIMEOUT_MS = 30_000
@@ -93,8 +105,6 @@ const UPDATE_TIMEOUT_MS = 120_000
 // Updating every package runs one install per outdated package.
 const UPDATE_ALL_TIMEOUT_MS = 300_000
 
-// Bare `pi update` updates Pi itself; `--extensions` limits it to packages.
-const PI_UPDATE_ALL_ARGS = ['update', '--extensions']
 const OMP_PLUGIN_LIST_ARGS = ['plugin', 'list', '--json']
 // Without a plugin id, OMP upgrades every outdated marketplace plugin.
 const OMP_MARKETPLACE_UPGRADE_ARGS = ['plugin', 'upgrade']
@@ -326,5 +336,5 @@ async function updatePackage(spec: string, cwd: string, engine: AgentEngineKind)
 
 async function updateAllPackages(cwd: string, engine: AgentEngineKind): Promise<CliResult> {
   if (engine === 'omp') return updateAllOmpPlugins(cwd)
-  return runPiCli(PI_UPDATE_ALL_ARGS, cwd, UPDATE_ALL_TIMEOUT_MS, engine)
+  return runPiCli([...PI_UPDATE_ALL_ARGS], cwd, UPDATE_ALL_TIMEOUT_MS, engine)
 }
