@@ -12,6 +12,7 @@ import { recordMidTurnSync } from './ipc/shutdown-turns-handlers'
 import type { TurnTracker } from './turn-tracker'
 import type { RelaySessionBridge } from './relay/relay-bridge'
 import { setPiExecutableOverride, cleanupPiChildTempDir } from './pi-rpc-manager'
+import { startPiAutoUpdater } from './pi-auto-updater'
 import { applyLanguageSetting } from './i18n'
 import { i18n, t } from '../shared/i18n'
 import { fetchAllCatalogPackages } from './package-catalog'
@@ -552,6 +553,10 @@ app.whenReady().then(async () => {
 
   // Create main window
   createMainWindow()
+
+  // Pi's updater can replace the CLI and installed extensions. It waits until
+  // every live agent process has stopped before running.
+  startPiAutoUpdater(workspaceManager)
 
   // System tray: inject deps once, then enable it if the setting is on. The
   // one-time "still running" hint reads/persists via app settings.
