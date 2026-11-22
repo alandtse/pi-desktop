@@ -711,7 +711,10 @@
       "invalidSpec": "Недопустимая спецификация пакета",
       "listFailed": "Не удалось прочитать список плагинов OMP: {{detail}}",
       "missingBun": "Для установки и обновления npm-плагинов OMP нужен bun. Установите bun с https://bun.sh и повторите попытку.",
-      "pinnedOrNotFromNpm": "{{spec}} закреплён на версии или установлен не из npm. Обновить его здесь нельзя."
+      "pinnedOrNotFromNpm": "{{spec}} закреплён на версии или установлен не из npm. Обновить его здесь нельзя.",
+      "updateCancelled": "Обновление отменено",
+      "updateExited": "Не удалось обновить ({{reason}})",
+      "updateTimedOut": "Время ожидания обновления истекло"
     },
     "permissionRules": {
       "fileTooLarge": "Файл правил слишком большой (лимит {{limit}} байт)"
@@ -1047,6 +1050,25 @@
       "updatesAvailable_other": "Доступно {{count}} обновления",
       "updateToVersion": "Обновить до v{{version}}",
       "versionUpdateArrow": "v{{from}} → v{{to}}"
+    },
+    "progress": {
+      "cancel": "Отмена",
+      "cancelled": "Обновление отменено",
+      "cancelling": "Отмена…",
+      "done": "Обновление завершено",
+      "elapsed": "прошло {{duration}}",
+      "failed": "Не удалось обновить",
+      "hideLog": "Скрыть вывод",
+      "noOutputYet": "Пока нет вывода. Это может занять минуту.",
+      "preparing": "Подготовка…",
+      "running": "Обновление {{target}}…",
+      "runningAll": "Обновление всех пакетов…",
+      "showLog": "Показать вывод",
+      "step": "{{completed}} из {{total}}",
+      "waitingForRuntimes_one": "Ожидание завершения {{count}} активного сеанса перед заменой CLI {{engine}}…",
+      "waitingForRuntimes_few": "",
+      "waitingForRuntimes_many": "",
+      "waitingForRuntimes_other": "Ожидание завершения {{count}} активных сеансов перед заменой CLI {{engine}}…"
     },
     "tabs": {
       "catalog": "Каталог",

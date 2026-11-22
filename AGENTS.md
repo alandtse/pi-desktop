@@ -126,6 +126,7 @@ src/
 │   ├── activity-stats.ts         # Persisted per-day message/token/model stats store
 │   ├── package-catalog.ts        # pi.dev catalog crawl, concurrent + prefetched + cached
 │   ├── package-updates.ts        # npm-registry update check + OMP npm-plugin update spec
+│   ├── package-update-progress.ts # Live phase/output of the running package mutation (one run at a time)
 │   ├── auto-tag.ts               # Machine-derived session tags
 │   ├── archived-sessions.ts      # Archived session persistence
 │   ├── app-data-paths.ts         # Resolve app data directories
@@ -270,6 +271,7 @@ src/
             ├── review-rail.tsx    # Review panel: permissions, approvals, changed files, session status
             ├── chat-tool-rail.tsx # Right-edge icon rail: review, files, diff, and terminal toggles
             ├── package-browser.tsx # Package/skill browser, fetch-once + local filter, update check
+            ├── package-update-progress.tsx # Update-all progress bar: phase, waiting runtimes, CLI output, Cancel
             ├── skills-panel.tsx   # Skills browser: search, user-made groups (settings `skillGroups`)
             ├── notes-panel.tsx    # Reusable prompts/notes
             ├── note-picker.tsx    # Insert a saved note
@@ -469,6 +471,7 @@ resources/
 - Browse installed packages: Pi from `settings.json` `packages[]`; OMP from `omp plugin list --json`
 - Package catalog from pi.dev, fetched once and filtered locally per keystroke; concurrent paged crawl with a shared in-flight promise, prefetched at launch so the tab opens at once
 - Install/remove/update packages through `pi install`/`pi remove`/`pi update`; under OMP the remove and update verbs map to `omp plugin uninstall`/`omp plugin upgrade` (`run-pi-cli.ts`). Package actions run the active session's engine CLI
+- Update all streams its progress to the Packages view (`EVENT_PACKAGE_UPDATE_PROGRESS`): a `waiting-for-runtimes` phase with a live count while agent sessions block the Pi CLI replacement, then each CLI output line as it arrives (`run-pi-cli.ts` `onLine`), and a Cancel button that aborts the child's process group (`PACKAGE_UPDATE_CANCEL`). The Installed list stays visible instead of being replaced by a spinner. The bar is determinate only when the run knows its steps (OMP's plugin-by-plugin path); npm and `pi update` expose no reliable total, so the rest is an honest indeterminate bar
 - Skills list with source (project/global/package/cli); see Engines for the per-engine roots
 - Extension commands display
 

@@ -22,6 +22,7 @@ import {
   CircleArrowUp,
 } from 'lucide-react'
 import { isImeComposing } from '../utils/ime-composing'
+import { PackageUpdateProgressPanel } from './package-update-progress'
 
 export function PackageBrowser(): React.JSX.Element {
   const { t } = useTranslation()
@@ -116,6 +117,11 @@ export function PackageBrowser(): React.JSX.Element {
 
       {/* Install bar (isolated: its keystrokes never re-render the tab lists) */}
       <InstallBar />
+
+      {/* Live progress for a running mutation: phase, waiting runtimes, CLI output */}
+      <div className="px-4 pt-3 empty:hidden">
+        <PackageUpdateProgressPanel />
+      </div>
 
       {/* Notification banner */}
       {packageNotification && (
@@ -283,7 +289,10 @@ const InstalledTab = memo(function InstalledTab({
 }): React.JSX.Element {
   const { t } = useTranslation()
 
-  if (loading) {
+  // A running mutation no longer blanks the tab: the list and the progress
+  // panel stay visible and only the actions are disabled. With nothing to show
+  // yet, a spinner is still the honest state.
+  if (loading && packages.length === 0) {
     return (
       <div className="flex items-center justify-center py-12">
         <Loader2 size={24} className="animate-spin text-dim" />
@@ -328,7 +337,8 @@ const InstalledTab = memo(function InstalledTab({
           <button
             type="button"
             onClick={onUpdateAll}
-            className="flex items-center gap-1 rounded bg-accent px-2.5 py-1 text-xs text-white hover:bg-accent-hover transition-colors"
+            disabled={loading}
+            className="flex items-center gap-1 rounded bg-accent px-2.5 py-1 text-xs text-white hover:bg-accent-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <CircleArrowUp size={12} />
             {t('packages.installed.updateAllButton')}
@@ -369,6 +379,7 @@ const InstalledTab = memo(function InstalledTab({
                 <button
                   type="button"
                   onClick={() => onUpdate(pkg.source)}
+                  disabled={loading}
                   className="rounded p-1.5 text-dim hover:bg-accent-bg hover:text-accent-fg transition-colors"
                   title={t('packages.installed.updateToVersion', { version: update.latestVersion })}
                   aria-label={t('packages.installed.updatePackageAria', { name: pkg.name })}

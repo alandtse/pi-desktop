@@ -20,6 +20,7 @@ import type {
   InstalledSkill,
   CatalogPackage,
   PackageUpdate,
+  PackageUpdateProgress,
   FileTreeNode,
   FileSearchResult,
   FileChangeEvent,
@@ -264,8 +265,12 @@ interface PiDesktopAPI {
     remove(spec: string): Promise<{ success: boolean; output: string }>
     update(spec: string): Promise<{ success: boolean; output: string }>
     updateAll(): Promise<{ success: boolean; output: string }>
+    /** Aborts the running update (its CLI and any npm grandchildren). */
+    cancelUpdate(): Promise<boolean>
     checkUpdates(): Promise<PackageUpdate[]>
     fetchCatalog(query?: string): Promise<CatalogPackage[]>
+    /** Phase and output lines of a package mutation, streamed from main. */
+    onUpdateProgress(callback: (progress: PackageUpdateProgress) => void): () => void
   }
 
   // Custom models config: the active engine's models file
@@ -644,8 +649,14 @@ const api: PiDesktopAPI = {
     remove: (spec) => ipcRenderer.invoke(IPC_CHANNELS.PACKAGE_REMOVE, spec),
     update: (spec) => ipcRenderer.invoke(IPC_CHANNELS.PACKAGE_UPDATE, spec),
     updateAll: () => ipcRenderer.invoke(IPC_CHANNELS.PACKAGE_UPDATE_ALL),
+    cancelUpdate: () => ipcRenderer.invoke(IPC_CHANNELS.PACKAGE_UPDATE_CANCEL),
     checkUpdates: () => ipcRenderer.invoke(IPC_CHANNELS.PACKAGE_CHECK_UPDATES),
     fetchCatalog: (query) => ipcRenderer.invoke(IPC_CHANNELS.PACKAGE_CATALOG_FETCH, query),
+    onUpdateProgress: (callback) => {
+      const handler = (_event: Electron.IpcRendererEvent, data: PackageUpdateProgress) => callback(data)
+      ipcRenderer.on(IPC_CHANNELS.EVENT_PACKAGE_UPDATE_PROGRESS, handler)
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.EVENT_PACKAGE_UPDATE_PROGRESS, handler)
+    },
   },
 
   models: {

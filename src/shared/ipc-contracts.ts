@@ -150,6 +150,8 @@ export const IPC_CHANNELS = {
   PACKAGE_REMOVE: 'package:remove',
   PACKAGE_UPDATE: 'package:update',
   PACKAGE_UPDATE_ALL: 'package:update-all',
+  /** Ask main to abort the running update; safe when nothing runs. */
+  PACKAGE_UPDATE_CANCEL: 'package:update-cancel',
   PACKAGE_CHECK_UPDATES: 'package:check-updates',
   PACKAGE_CATALOG_FETCH: 'package:catalog-fetch',
 
@@ -267,6 +269,7 @@ export const IPC_CHANNELS = {
   EVENT_COUNCIL_PROGRESS: 'event:council-progress',
   EVENT_VOICE_PROGRESS: 'event:voice-progress',
   EVENT_VOICE_SHORTCUT: 'event:voice-shortcut',
+  EVENT_PACKAGE_UPDATE_PROGRESS: 'event:package-update-progress',
 
   // Voice dictation
   VOICE_STATUS: 'voice:status',
@@ -2021,6 +2024,43 @@ export interface PackageUpdate {
   source: string
   installedVersion: string
   latestVersion: string
+}
+
+/**
+ * One step of a package update streamed to the renderer.
+ *
+ * `waiting-for-runtimes` is the part that used to be silent: main will not
+ * replace the Pi CLI while any session runtime is still starting or running, so
+ * the UI has to say it is waiting rather than look frozen. `output` carries the
+ * CLI's own lines as they arrive, so a slow `npm install` shows something.
+ */
+export type PackageUpdatePhase =
+  | 'waiting-for-runtimes'
+  | 'preparing'
+  | 'running'
+  | 'output'
+  | 'done'
+  | 'cancelled'
+
+/** Progress of one package mutation (main → renderer on EVENT_PACKAGE_UPDATE_PROGRESS). */
+export interface PackageUpdateProgress {
+  /** Distinguishes overlapping mutations so a late event cannot rewrite a newer run. */
+  runId: number
+  phase: PackageUpdatePhase
+  /** What is being updated: a package spec, `all`, or the engine's CLI. */
+  target: string
+  /** Engine whose CLI is running. */
+  engine: AgentEngineKind
+  /** Runtimes still starting or running while `waiting-for-runtimes`. */
+  waitingRuntimes?: number
+  /** One sanitized line of CLI output while `output`. */
+  line?: string
+  /** Finished steps and total steps, when the run knows its plan. */
+  completed?: number
+  total?: number
+  /** Human-readable failure detail while `done` with `success: false`. */
+  error?: string
+  success?: boolean
 }
 
 export interface CatalogPackage {

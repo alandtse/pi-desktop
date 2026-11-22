@@ -5,7 +5,15 @@ import { fetchPackageCatalog } from '../package-catalog'
 import { readFile } from 'fs/promises'
 import { join } from 'path'
 import { assertTrustedSender, isString } from './validation'
-import { runPiCli } from './run-pi-cli'
+import { runPiCli, type PiCliStreamOptions } from './run-pi-cli'
+import {
+  beginPackageUpdate,
+  cancelPackageUpdate,
+  endPackageUpdate,
+  setPackageUpdateEmitter,
+  updatePackageProgress,
+  type PackageUpdateRun,
+} from '../package-update-progress'
 import { activeEngineKind } from './active-engine'
 import { parseOmpPluginList, type OmpNpmPlugin } from '../omp-plugin-list'
 import {
@@ -26,6 +34,7 @@ import { t } from '../../shared/i18n'
 
 export function registerPackageHandlers(ctx: IpcContext): void {
   const { workspaceManager } = ctx
+  setPackageUpdateEmitter((progress) => ctx.broadcast(IPC_CHANNELS.EVENT_PACKAGE_UPDATE_PROGRESS, progress))
 
   // ─── Package Management ─────────────────────────────────────────────────
 
@@ -64,7 +73,17 @@ export function registerPackageHandlers(ctx: IpcContext): void {
     if (!isValidPackageSpec(packageSpec)) throw new Error(t('errors.packages.invalidSpec'))
     const ws = workspaceManager.getActiveWorkspace()
     const cwd = ws?.path ?? process.cwd()
-    return updatePackage(packageSpec, cwd, activeEngine())
+    const engine = activeEngine()
+    const run = beginPackageUpdate(engine, packageSpec)
+    try {
+      updatePackageProgress(run, { phase: 'running' })
+      const result = await updatePackage(packageSpec, cwd, engine, streamOptions(run))
+      endPackageUpdate(run, { success: result.success, error: result.success ? undefined : result.output })
+      return result
+    } catch (error) {
+      endPackageUpdate(run, { success: false, error: describeError(error) })
+      throw error
+    }
   })
 
   ipcMain.handle(IPC_CHANNELS.PACKAGE_UPDATE_ALL, async (event) => {
@@ -72,8 +91,27 @@ export function registerPackageHandlers(ctx: IpcContext): void {
     const ws = workspaceManager.getActiveWorkspace()
     const cwd = ws?.path ?? process.cwd()
     const engine = activeEngine()
-    if (engine === 'pi') await waitForAgentRuntimesToStop(workspaceManager)
-    return updateAllPackages(cwd, engine)
+    const run = beginPackageUpdate(engine, 'all')
+    try {
+      // Replacing the Pi CLI (and the shared npm tree its packages live in)
+      // while a session runtime has it loaded is what this wait prevents, and
+      // it is also what made the old silent version look hung: name that state.
+      if (engine === 'pi' && !(await waitForAgentRuntimesToStop(workspaceManager, run))) {
+        return { success: false, output: t('errors.packages.updateCancelled') }
+      }
+      updatePackageProgress(run, { phase: 'running' })
+      const result = await updateAllPackages(cwd, engine, run)
+      endPackageUpdate(run, { success: result.success, error: result.success ? undefined : result.output })
+      return result
+    } catch (error) {
+      endPackageUpdate(run, { success: false, error: describeError(error) })
+      throw error
+    }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.PACKAGE_UPDATE_CANCEL, async (event) => {
+    assertTrustedSender(event)
+    return cancelPackageUpdate()
   })
 
   ipcMain.handle(IPC_CHANNELS.PACKAGE_CHECK_UPDATES, async () => {
@@ -89,11 +127,34 @@ export function registerPackageHandlers(ctx: IpcContext): void {
 
 // ─── Package Management ──────────────────────────────────────────────────────
 
-/** Defer replacement of the CLI/package installation until no agent process uses it. */
-async function waitForAgentRuntimesToStop(workspaceManager: IpcContext['workspaceManager']): Promise<void> {
-  while (workspaceManager.getSessionRuntimes().some((runtime) =>
-    runtime.status === 'starting' || runtime.status === 'running'
-  )) {
+function describeError(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
+}
+
+/** Stream each CLI line to the progress event; the run's signal cancels it. */
+function streamOptions(run: PackageUpdateRun): PiCliStreamOptions {
+  return {
+    signal: run.controller.signal,
+    onLine: (line) => updatePackageProgress(run, { phase: 'output', line }),
+  }
+}
+
+/**
+ * Defer replacement of the CLI/package installation until no agent process uses
+ * it, reporting a live count so the UI can say what it is waiting for.
+ * Returns false when the user cancelled during the wait.
+ */
+async function waitForAgentRuntimesToStop(
+  workspaceManager: IpcContext['workspaceManager'],
+  run: PackageUpdateRun,
+): Promise<boolean> {
+  for (;;) {
+    if (run.controller.signal.aborted) return false
+    const waitingRuntimes = workspaceManager.getSessionRuntimes().filter((runtime) =>
+      runtime.status === 'starting' || runtime.status === 'running'
+    ).length
+    if (waitingRuntimes === 0) return true
+    updatePackageProgress(run, { phase: 'waiting-for-runtimes', waitingRuntimes })
     await new Promise<void>((resolve) => setTimeout(resolve, 1_000))
   }
 }
@@ -210,7 +271,6 @@ async function withOmpNpmTargets(
   }
   return mutate(targets)
 }
-
 function ompUpdateCandidates(targets: OmpNpmTarget[]): UpdateCandidate[] {
   return targets.flatMap(({ plugin, query }) =>
     query && plugin.version ? [{ source: plugin.name, query, installedVersion: plugin.version }] : []
@@ -236,8 +296,13 @@ function withOmpFailureExplained(result: CliResult, engine: AgentEngineKind): Cl
 }
 
 /** Run an OMP command that changes the plugin store. */
-async function runOmpMutation(args: string[], cwd: string, timeout: number): Promise<CliResult> {
-  return withOmpFailureExplained(await runPiCli(args, cwd, timeout, 'omp'), 'omp')
+async function runOmpMutation(
+  args: string[],
+  cwd: string,
+  timeout: number,
+  options?: PiCliStreamOptions,
+): Promise<CliResult> {
+  return withOmpFailureExplained(await runPiCli(args, cwd, timeout, 'omp', options), 'omp')
 }
 
 /**
@@ -245,32 +310,59 @@ async function runOmpMutation(args: string[], cwd: string, timeout: number): Pro
  * registry. The install spec carries the feature selection; `omp install`
  * also re-enables the plugin, so a disabled plugin is disabled again.
  */
-async function updateOmpNpmPlugin(plugin: OmpNpmPlugin, query: OmpRegistryQuery, cwd: string): Promise<CliResult> {
-  const install = await runOmpMutation(['install', ompUpdateInstallSpec(query, plugin)], cwd, UPDATE_TIMEOUT_MS)
+async function updateOmpNpmPlugin(
+  plugin: OmpNpmPlugin,
+  query: OmpRegistryQuery,
+  cwd: string,
+  options?: PiCliStreamOptions,
+): Promise<CliResult> {
+  const install = await runOmpMutation(
+    ['install', ompUpdateInstallSpec(query, plugin)],
+    cwd,
+    UPDATE_TIMEOUT_MS,
+    options,
+  )
   if (!install.success || plugin.enabled) return install
-  const disable = await runOmpMutation(['plugin', 'disable', plugin.name], cwd, UPDATE_TIMEOUT_MS)
+  const disable = await runOmpMutation(['plugin', 'disable', plugin.name], cwd, UPDATE_TIMEOUT_MS, options)
   return combineResults([install, disable])
 }
 
-async function updateOmpPlugin(spec: string, cwd: string): Promise<CliResult> {
+async function updateOmpPlugin(
+  spec: string,
+  cwd: string,
+  options?: PiCliStreamOptions,
+): Promise<CliResult> {
   return withOmpNpmTargets(cwd, async (targets) => {
     const target = targets.find(({ plugin }) => plugin.name === spec)
     // Not an npm plugin: marketplace ids (`name@marketplace`) have a native upgrade.
-    if (!target) return runOmpMutation(['plugin', 'upgrade', spec], cwd, UPDATE_TIMEOUT_MS)
+    if (!target) return runOmpMutation(['plugin', 'upgrade', spec], cwd, UPDATE_TIMEOUT_MS, options)
     if (!target.query) {
       return { success: false, output: t('errors.packages.pinnedOrNotFromNpm', { spec }) }
     }
-    return updateOmpNpmPlugin(target.plugin, target.query, cwd)
+    return updateOmpNpmPlugin(target.plugin, target.query, cwd, options)
   })
 }
 
-async function updateAllOmpPlugins(cwd: string): Promise<CliResult> {
+async function updateAllOmpPlugins(
+  cwd: string,
+  run: PackageUpdateRun,
+  options: PiCliStreamOptions,
+): Promise<CliResult> {
   return withOmpNpmTargets(cwd, async (targets) => {
     const outdated = new Set((await findPackageUpdates(ompUpdateCandidates(targets))).map((update) => update.source))
-    const results = [await runOmpMutation(OMP_MARKETPLACE_UPGRADE_ARGS, cwd, UPDATE_ALL_TIMEOUT_MS)]
+    const plugins = targets.filter(({ plugin, query }) => query && outdated.has(plugin.name))
+    // One marketplace upgrade plus one reinstall per outdated npm plugin: the
+    // only path here where a real step total exists.
+    const total = plugins.length + 1
+    updatePackageProgress(run, { phase: 'running', completed: 0, total })
+    const results = [await runOmpMutation(OMP_MARKETPLACE_UPGRADE_ARGS, cwd, UPDATE_ALL_TIMEOUT_MS, options)]
+    updatePackageProgress(run, { phase: 'running', completed: 1, total })
     // Sequential: every npm plugin shares one bun project and lockfile.
-    for (const { plugin, query } of targets) {
-      if (query && outdated.has(plugin.name)) results.push(await updateOmpNpmPlugin(plugin, query, cwd))
+    for (const [index, { plugin, query }] of plugins.entries()) {
+      if (!query) continue
+      updatePackageProgress(run, { phase: 'running', target: plugin.name, completed: index + 1, total })
+      results.push(await updateOmpNpmPlugin(plugin, query, cwd, options))
+      updatePackageProgress(run, { phase: 'running', completed: index + 2, total })
     }
     return combineResults(results)
   })
@@ -329,12 +421,22 @@ async function removePackage(spec: string, cwd: string, engine: AgentEngineKind)
   return runPiCli(['remove', spec], cwd, REMOVE_TIMEOUT_MS, engine)
 }
 
-async function updatePackage(spec: string, cwd: string, engine: AgentEngineKind): Promise<CliResult> {
-  if (engine === 'omp') return updateOmpPlugin(spec, cwd)
-  return runPiCli(['update', spec], cwd, UPDATE_TIMEOUT_MS, engine)
+async function updatePackage(
+  spec: string,
+  cwd: string,
+  engine: AgentEngineKind,
+  options?: PiCliStreamOptions,
+): Promise<CliResult> {
+  if (engine === 'omp') return updateOmpPlugin(spec, cwd, options)
+  return runPiCli(['update', spec], cwd, UPDATE_TIMEOUT_MS, engine, options)
 }
 
-async function updateAllPackages(cwd: string, engine: AgentEngineKind): Promise<CliResult> {
-  if (engine === 'omp') return updateAllOmpPlugins(cwd)
-  return runPiCli([...PI_UPDATE_ALL_ARGS], cwd, UPDATE_ALL_TIMEOUT_MS, engine)
+async function updateAllPackages(
+  cwd: string,
+  engine: AgentEngineKind,
+  run: PackageUpdateRun,
+): Promise<CliResult> {
+  const options = streamOptions(run)
+  if (engine === 'omp') return updateAllOmpPlugins(cwd, run, options)
+  return runPiCli([...PI_UPDATE_ALL_ARGS], cwd, UPDATE_ALL_TIMEOUT_MS, engine, options)
 }

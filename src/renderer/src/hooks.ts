@@ -53,6 +53,11 @@ export function usePiEvents(): void {
     const unsubscribeCounts = window.piDesktop.onPendingPrompts(handlePendingPromptCounts)
     const unsubscribeActivity = window.piDesktop.onWorkspaceActivity(handleWorkspaceActivity)
     const unsubscribeSessionRuntime = window.piDesktop.onSessionRuntime(handleSessionRuntime)
+    // Package mutations run in main (waiting for agent runtimes, then a slow
+    // npm/CLI update), so their phase and output arrive as their own stream.
+    const unsubscribePackageUpdate = window.piDesktop.packages.onUpdateProgress((progress) => {
+      useAppStore.getState().applyPackageUpdateProgress(progress)
+    })
 
     // A desktop-notification click hands the renderer the switch intent so the
     // usual streaming/dirty-editor confirms still run; landing on chat shows
@@ -113,6 +118,7 @@ export function usePiEvents(): void {
       unsubscribeCounts()
       unsubscribeActivity()
       unsubscribeSessionRuntime()
+      unsubscribePackageUpdate()
       unsubscribeActivate()
     }
   }, [handlePiEvent, handleRelayFrame, handlePendingPromptCounts, handleWorkspaceActivity, handleSessionRuntime, recoverPendingPrompts])

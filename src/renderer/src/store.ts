@@ -96,6 +96,7 @@ import type {
   InstalledSkill,
   CatalogPackage,
   PackageUpdate,
+  PackageUpdateProgress,
   TimelineEvent,
   PermissionMode,
   Note,
@@ -481,6 +482,12 @@ interface AppState {
   packageNotification: { type: 'success' | 'error'; message: string } | null
   packageUpdates: PackageUpdate[] // installed packages with a newer registry version
   packageUpdatesChecking: boolean
+  /** Live state of the running package mutation; null when nothing runs. */
+  packageUpdateProgress: PackageUpdateProgress | null
+  /** When the running mutation started, for its elapsed-time label. */
+  packageUpdateStartedAt: number | null
+  /** Recent CLI output lines of the running mutation, newest last. */
+  packageUpdateLines: string[]
 
   // Skills
   installedSkills: InstalledSkill[]
@@ -811,6 +818,9 @@ interface AppActions {
   removePackage: (spec: string) => Promise<void>
   updatePackage: (spec: string) => Promise<void>
   updateAllPackages: () => Promise<void>
+  cancelPackageUpdate: () => Promise<void>
+  /** Fold one progress event from main into the store. */
+  applyPackageUpdateProgress: (progress: PackageUpdateProgress) => void
   checkPackageUpdates: () => Promise<void>
   loadCatalog: () => Promise<void>
   clearPackageNotification: () => void
@@ -1779,6 +1789,9 @@ async function runArbiterStep(
  * Run one package install/remove/update under the Installed tab's shared
  * loading flag and notification banner. The list refreshes even on failure:
  * a multi-package update can fail after changing some packages.
+ *
+ * Progress arrives as its own stream (`applyPackageUpdateProgress`), so this
+ * only has to clear the previous run and settle the result.
  */
 async function runPackageMutation(
   get: StoreGet,
@@ -1787,7 +1800,13 @@ async function runPackageMutation(
   successMessage: string,
   failureMessage: string,
 ): Promise<void> {
-  set({ packageLoading: true, packageNotification: null })
+  set({
+    packageLoading: true,
+    packageNotification: null,
+    packageUpdateProgress: null,
+    packageUpdateStartedAt: Date.now(),
+    packageUpdateLines: [],
+  })
   try {
     const result = await mutation()
     await get().loadInstalledPackages()
@@ -1799,13 +1818,16 @@ async function runPackageMutation(
   } catch (err) {
     set({ packageNotification: { type: 'error', message: err instanceof Error ? err.message : String(err) } })
   } finally {
-    set({ packageLoading: false })
+    set({ packageLoading: false, packageUpdateStartedAt: null })
   }
 }
 
 // Only the newest update check may write its result: a check started before an
 // update finished would otherwise overwrite the fresh one with stale versions.
 let latestPackageUpdateCheck = 0
+
+/** Enough to show what the CLI is doing without letting the panel grow unbounded. */
+const PACKAGE_UPDATE_LOG_LINES = 60
 
 // Engine changes can start reads of two models files at once; the last one wins.
 const customModelsLoads = createStaleGuard()
@@ -1886,6 +1908,9 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
   packageNotification: null,
   packageUpdates: [],
   packageUpdatesChecking: false,
+  packageUpdateProgress: null,
+  packageUpdateStartedAt: null,
+  packageUpdateLines: [],
 
   installedSkills: [],
 
@@ -4750,6 +4775,25 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
       t('store.messages.updatePackageFailed'),
     )
     await get().checkPackageUpdates()
+  },
+
+  cancelPackageUpdate: async () => {
+    try {
+      await window.piDesktop.packages.cancelUpdate()
+    } catch {
+      // The run has already ended: the UI settles from its own final event.
+    }
+  },
+
+  applyPackageUpdateProgress: (progress) => {
+    set((state) => ({
+      packageUpdateProgress: progress,
+      packageUpdateLines: progress.phase === 'output' && progress.line
+        ? [...state.packageUpdateLines, progress.line].slice(-PACKAGE_UPDATE_LOG_LINES)
+        : state.packageUpdateLines,
+      // A terminal phase means the mutation's own promise is about to settle;
+      // the started time stays until then so no elapsed label flashes back.
+    }))
   },
 
   checkPackageUpdates: async () => {

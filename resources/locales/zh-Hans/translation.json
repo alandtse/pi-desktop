@@ -663,7 +663,10 @@
       "invalidSpec": "无效的包描述",
       "listFailed": "无法读取 OMP 插件列表：{{detail}}",
       "missingBun": "OMP 需要 bun 来安装或更新 npm 插件。请从 https://bun.sh 安装 bun，然后重试。",
-      "pinnedOrNotFromNpm": "{{spec}} 已固定版本，或并非从 npm 安装，因此无法在此更新。"
+      "pinnedOrNotFromNpm": "{{spec}} 已固定版本，或并非从 npm 安装，因此无法在此更新。",
+      "updateCancelled": "更新已取消",
+      "updateExited": "更新失败（{{reason}}）",
+      "updateTimedOut": "更新超时"
     },
     "permissionRules": {
       "fileTooLarge": "规则文件过大（上限 {{limit}} 字节）"
@@ -987,6 +990,23 @@
       "updatesAvailable_other": "有 {{count}} 项更新可用",
       "updateToVersion": "更新到 v{{version}}",
       "versionUpdateArrow": "v{{from}} → v{{to}}"
+    },
+    "progress": {
+      "cancel": "取消",
+      "cancelled": "更新已取消",
+      "cancelling": "正在取消…",
+      "done": "更新完成",
+      "elapsed": "已耗时 {{duration}}",
+      "failed": "更新失败",
+      "hideLog": "隐藏输出",
+      "noOutputYet": "暂无输出。这可能需要一分钟。",
+      "preparing": "正在准备…",
+      "running": "正在更新 {{target}}…",
+      "runningAll": "正在更新所有包…",
+      "showLog": "显示输出",
+      "step": "第 {{completed}} / {{total}} 步",
+      "waitingForRuntimes_one": "正在等待 {{count}} 个活动会话结束，然后替换 {{engine}} CLI…",
+      "waitingForRuntimes_other": "正在等待 {{count}} 个活动会话结束，然后替换 {{engine}} CLI…"
     },
     "tabs": {
       "catalog": "软件目录",

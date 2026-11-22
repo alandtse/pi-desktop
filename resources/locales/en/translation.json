@@ -679,7 +679,10 @@
       "invalidSpec": "Invalid package specification",
       "listFailed": "Could not read the OMP plugin list: {{detail}}",
       "missingBun": "OMP needs bun to install or update npm plugins. Install bun from https://bun.sh, then try again.",
-      "pinnedOrNotFromNpm": "{{spec}} is pinned or was not installed from npm, so it cannot be updated here."
+      "pinnedOrNotFromNpm": "{{spec}} is pinned or was not installed from npm, so it cannot be updated here.",
+      "updateCancelled": "Update cancelled",
+      "updateExited": "The update failed ({{reason}})",
+      "updateTimedOut": "The update timed out"
     },
     "permissionRules": {
       "fileTooLarge": "rules file too large (limit {{limit}} bytes)"
@@ -1007,6 +1010,23 @@
       "updatesAvailable_other": "{{count}} updates available",
       "updateToVersion": "Update to v{{version}}",
       "versionUpdateArrow": "v{{from}} → v{{to}}"
+    },
+    "progress": {
+      "cancel": "Cancel",
+      "cancelled": "Update cancelled",
+      "cancelling": "Cancelling…",
+      "done": "Update finished",
+      "elapsed": "{{duration}} elapsed",
+      "failed": "Update failed",
+      "hideLog": "Hide output",
+      "noOutputYet": "No output yet. This can take a minute.",
+      "preparing": "Preparing…",
+      "running": "Updating {{target}}…",
+      "runningAll": "Updating all packages…",
+      "showLog": "Show output",
+      "step": "{{completed}} of {{total}}",
+      "waitingForRuntimes_one": "Waiting for {{count}} active session to stop before replacing the {{engine}} CLI…",
+      "waitingForRuntimes_other": "Waiting for {{count}} active sessions to stop before replacing the {{engine}} CLI…"
     },
     "tabs": {
       "catalog": "Catalog",
