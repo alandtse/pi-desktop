@@ -131,11 +131,40 @@ if [ "$PLATFORM" = "linux" ]; then
   # Download to a temporary file in the install directory, then rename it into
   # place. A failed download cannot leave a broken binary, and the rename works
   # while an older Pi Desktop is running.
+  if ! command -v sha256sum >/dev/null 2>&1; then
+    echo "Error: sha256sum is required to verify the downloaded installer."
+    exit 1
+  fi
+
   DOWNLOAD_TMP="$(mktemp "$INSTALL_DIR/.$BINARY_NAME.XXXXXX")"
-  trap 'rm -f "$DOWNLOAD_TMP"' EXIT
+  CHECKSUM_TMP="$(mktemp "$INSTALL_DIR/.$BINARY_NAME.sha256.XXXXXX")"
+  trap 'rm -f "$DOWNLOAD_TMP" "$CHECKSUM_TMP"' EXIT
+
+  ASSET_NAME="${DOWNLOAD_URL##*/}"
+  echo "Downloading checksum for: $ASSET_NAME"
+  if ! curl -fL --silent --show-error "$DOWNLOAD_URL.sha256" -o "$CHECKSUM_TMP"; then
+    echo "Error: Could not download the SHA-256 checksum for $ASSET_NAME."
+    exit 1
+  fi
+  EXPECTED_SHA256="$(awk 'NR == 1 {print $1}' "$CHECKSUM_TMP")"
+  CHECKSUM_ASSET="$(awk 'NR == 1 {print $2}' "$CHECKSUM_TMP")"
+  if [[ ! "$EXPECTED_SHA256" =~ ^[[:xdigit:]]{64}$ || "$CHECKSUM_ASSET" != "$ASSET_NAME" ]]; then
+    echo "Error: Invalid SHA-256 checksum file for $ASSET_NAME."
+    exit 1
+  fi
 
   echo "Downloading: $DOWNLOAD_URL"
-  curl -fL --progress-bar "$DOWNLOAD_URL" -o "$DOWNLOAD_TMP"
+  if ! curl -fL --progress-bar "$DOWNLOAD_URL" -o "$DOWNLOAD_TMP"; then
+    echo "Error: Could not download $ASSET_NAME."
+    exit 1
+  fi
+  ACTUAL_SHA256="$(sha256sum "$DOWNLOAD_TMP" | awk '{print $1}')"
+  EXPECTED_SHA256="$(printf '%s' "$EXPECTED_SHA256" | tr 'A-F' 'a-f')"
+  if [[ "$EXPECTED_SHA256" != "$ACTUAL_SHA256" ]]; then
+    echo "Error: SHA-256 mismatch for $ASSET_NAME; refusing to install it."
+    exit 1
+  fi
+
   # mktemp creates the file owner-only, so set the full mode explicitly.
   chmod "$BINARY_MODE" "$DOWNLOAD_TMP"
   mv -f "$DOWNLOAD_TMP" "$OUTPUT"
