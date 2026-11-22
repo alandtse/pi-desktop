@@ -90,6 +90,7 @@ export const IPC_CHANNELS = {
   UI_EDITOR_RESPONSE: 'ui:editor-response',
   UI_PENDING_FLUSH: 'ui:pending-flush',
   UI_PENDING_GET: 'ui:pending-get',
+  UI_PENDING_LIST: 'ui:pending-list',
   UI_EDITOR_DIRTY_SET: 'ui:editor-dirty-set',
 
   // System
@@ -674,6 +675,17 @@ export interface PiExtensionUiRequest {
  * id. Zero entries are omitted, so an empty object means nothing is waiting.
  */
 export type PendingPromptCounts = Record<string, number>
+
+/** One blocking extension-UI request retained by the main process. */
+export interface PendingPromptItem {
+  request: PiExtensionUiRequest
+  workspaceId: string
+  /** Identifies the session runtime within a workspace. */
+  runtimeId: string
+  sessionPath: string | null
+  /** Epoch ms when the request first arrived from Pi. */
+  receivedAt: number
+}
 
 /**
  * Per-workspace background activity derived in the main process from every

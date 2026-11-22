@@ -68,6 +68,12 @@ function createHarness(workspaceIds: string[], activeId: string | null = workspa
       }
       return null
     },
+    runtimeIdFor: (manager) => {
+      for (const [workspaceId, candidate] of managers) {
+        if (candidate === manager) return workspaceId
+      }
+      return null
+    },
     broadcastEvent: (event) => broadcasts.push(event),
     broadcastPendingCounts: (counts) => countsLog.push(counts),
     now: () => clock.now,
@@ -99,6 +105,55 @@ function createHarness(workspaceIds: string[], activeId: string | null = workspa
 }
 
 // ─── Passthrough filter ──────────────────────────────────────────────────────
+
+test('inbox snapshots include delivered and queued prompts with runtime provenance', () => {
+  const first = new PiRpcManager()
+  const second = new PiRpcManager()
+  const sent: { runtime: string; id: string; response: Record<string, unknown> }[] = []
+  first.sendExtensionUiResponse = (id, response) => sent.push({ runtime: 'runtime-a', id, response })
+  second.sendExtensionUiResponse = (id, response) => sent.push({ runtime: 'runtime-b', id, response })
+  let now = 10
+  const router = createPiEventRouter({
+    getActiveManager: () => first,
+    workspaceIdFor: (manager) => manager === first || manager === second ? WS_A : null,
+    runtimeIdFor: (manager) => manager === first ? 'runtime-a' : manager === second ? 'runtime-b' : null,
+    sessionPathFor: (manager) => manager === first ? '/sessions/a.jsonl' : '/sessions/b.jsonl',
+    broadcastEvent: () => {},
+    broadcastPendingCounts: () => {},
+    now: () => now,
+  })
+  router.attachManager(first)
+  router.attachManager(second)
+
+  first.emit('event', dialogRequest('reused-id'))
+  now = 20
+  second.emit('event', dialogRequest('reused-id', { method: 'input', title: 'Background question' }))
+
+  assert.deepEqual(router.listPendingPrompts(), [
+    {
+      request: dialogRequest('reused-id'),
+      workspaceId: WS_A,
+      runtimeId: 'runtime-a',
+      sessionPath: '/sessions/a.jsonl',
+      receivedAt: 10,
+    },
+    {
+      request: dialogRequest('reused-id', { method: 'input', title: 'Background question' }),
+      workspaceId: WS_A,
+      runtimeId: 'runtime-b',
+      sessionPath: '/sessions/b.jsonl',
+      receivedAt: 20,
+    },
+  ])
+
+  // A reply to the queued item must target its runtime, not the first manager
+  // that registered this same synthetic request id.
+  router.respond('reused-id', { value: 'answer-b' }, 'runtime-b')
+  assert.deepEqual(sent, [{ runtime: 'runtime-b', id: 'reused-id', response: { value: 'answer-b' } }])
+  assert.equal(router.listPendingPrompts().length, 1)
+  router.respond('reused-id', { confirmed: true }, 'runtime-a')
+  assert.deepEqual(sent[1], { runtime: 'runtime-a', id: 'reused-id', response: { confirmed: true } })
+})
 
 test('non-dialog events pass through from the active manager only', () => {
   const h = createHarness([WS_A, WS_B])

@@ -6,7 +6,7 @@ import type { PiRpcManager } from './pi-rpc-manager'
 /**
  * Wiring for the extension-UI half of the IPC surface: the Pi event router,
  * the four channels that answer a blocking dialog (select/confirm/input/
- * editor), the pending-prompt flush/get pair, and the two workspace hooks that
+ * editor), the pending-prompt flush/get/list operations, and the workspace hooks that
  * keep them fed.
  *
  * Electron-free: the handler registrar, the sender check, the broadcaster and
@@ -25,6 +25,7 @@ export type IpcInvokeRegistrar<TEvent> = (
 export interface ExtensionUiWorkspace {
   getActivePiManager(): PiRpcManager | null
   workspaceIdFor(manager: PiRpcManager): string | null
+  runtimeIdFor(manager: PiRpcManager): string | null
   /** The session file a manager is running, or null when it runs none. */
   sessionPathFor(manager: PiRpcManager): string | null
   onPiManager(listener: (manager: PiRpcManager) => void): void
@@ -59,6 +60,7 @@ export function createExtensionUiRouter(deps: {
   return createPiEventRouter({
     getActiveManager: () => deps.workspace.getActivePiManager(),
     workspaceIdFor: (manager) => deps.workspace.workspaceIdFor(manager),
+    runtimeIdFor: (manager) => deps.workspace.runtimeIdFor(manager),
     broadcastEvent: (event) => deps.broadcast(IPC_CHANNELS.EVENT_PI, event),
     broadcastPendingCounts: (counts) => {
       deps.onPendingCounts?.(counts)
@@ -79,10 +81,12 @@ export function wireExtensionUiIpc<TEvent>(deps: ExtensionUiIpcDeps<TEvent>): vo
     channel: string,
     toResponse: (payload: unknown) => Record<string, unknown>,
   ): void => {
-    handle(channel, async (event, id: unknown, payload: unknown) => {
+    handle(channel, async (event, id: unknown, payload: unknown, runtimeId: unknown) => {
       assertTrustedSender(event)
       if (typeof id !== 'string') throw new Error('id must be a string')
-      router.respond(id, toResponse(payload))
+      if (runtimeId !== undefined && typeof runtimeId !== 'string') throw new Error('runtimeId must be a string')
+      if (runtimeId === undefined) router.respond(id, toResponse(payload))
+      else router.respond(id, toResponse(payload), runtimeId)
     })
   }
 
@@ -100,6 +104,11 @@ export function wireExtensionUiIpc<TEvent>(deps: ExtensionUiIpcDeps<TEvent>): vo
   handle(IPC_CHANNELS.UI_PENDING_GET, async (event) => {
     assertTrustedSender(event)
     return router.getPendingCounts()
+  })
+
+  handle(IPC_CHANNELS.UI_PENDING_LIST, async (event) => {
+    assertTrustedSender(event)
+    return router.listPendingPrompts()
   })
 
   // Every Pi manager feeds the router. It forwards non-dialog events ONLY from

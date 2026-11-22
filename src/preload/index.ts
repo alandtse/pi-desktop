@@ -70,6 +70,7 @@ import type {
   PermissionRulesWorkspaceStatus,
   PermissionRulesRemoveResult,
   PendingPromptCounts,
+  PendingPromptItem,
   WorkspaceActivityMap,
   WorkflowRunSummary,
   WorkflowRunDetail,
@@ -484,16 +485,17 @@ interface PiDesktopAPI {
 
   // Extension UI responses
   ui: {
-    respondSelect(id: string, value: string): void
-    respondConfirm(id: string, confirmed: boolean): void
-    respondInput(id: string, value: string): void
-    respondEditor(id: string, value: string): void
+    respondSelect(id: string, value: string, runtimeId?: string): Promise<void>
+    respondConfirm(id: string, confirmed: boolean, runtimeId?: string): Promise<void>
+    respondInput(id: string, value: string, runtimeId?: string): Promise<void>
+    respondEditor(id: string, value: string, runtimeId?: string): Promise<void>
     /**
      * Ask main to (re-)deliver the workspace's held blocking prompt.
      * No-op unless the workspace is active when the flush executes.
      */
     flushPendingPrompts(workspaceId: string): Promise<void>
     getPendingPrompts(): Promise<PendingPromptCounts>
+    listPendingPrompts(): Promise<PendingPromptItem[]>
     /**
      * Mirror the editor pane's unsaved-changes state to main, which guards
      * quit, window close, and reload behind a discard confirmation.
@@ -838,12 +840,25 @@ const api: PiDesktopAPI = {
   },
 
   ui: {
-    respondSelect: (id, value) => ipcRenderer.invoke(IPC_CHANNELS.UI_SELECT_RESPONSE, id, value),
-    respondConfirm: (id, confirmed) => ipcRenderer.invoke(IPC_CHANNELS.UI_CONFIRM_RESPONSE, id, confirmed),
-    respondInput: (id, value) => ipcRenderer.invoke(IPC_CHANNELS.UI_INPUT_RESPONSE, id, value),
-    respondEditor: (id, value) => ipcRenderer.invoke(IPC_CHANNELS.UI_EDITOR_RESPONSE, id, value),
+    respondSelect: (id, value, runtimeId) =>
+      runtimeId === undefined
+        ? ipcRenderer.invoke(IPC_CHANNELS.UI_SELECT_RESPONSE, id, value)
+        : ipcRenderer.invoke(IPC_CHANNELS.UI_SELECT_RESPONSE, id, value, runtimeId),
+    respondConfirm: (id, confirmed, runtimeId) =>
+      runtimeId === undefined
+        ? ipcRenderer.invoke(IPC_CHANNELS.UI_CONFIRM_RESPONSE, id, confirmed)
+        : ipcRenderer.invoke(IPC_CHANNELS.UI_CONFIRM_RESPONSE, id, confirmed, runtimeId),
+    respondInput: (id, value, runtimeId) =>
+      runtimeId === undefined
+        ? ipcRenderer.invoke(IPC_CHANNELS.UI_INPUT_RESPONSE, id, value)
+        : ipcRenderer.invoke(IPC_CHANNELS.UI_INPUT_RESPONSE, id, value, runtimeId),
+    respondEditor: (id, value, runtimeId) =>
+      runtimeId === undefined
+        ? ipcRenderer.invoke(IPC_CHANNELS.UI_EDITOR_RESPONSE, id, value)
+        : ipcRenderer.invoke(IPC_CHANNELS.UI_EDITOR_RESPONSE, id, value, runtimeId),
     flushPendingPrompts: (workspaceId) => ipcRenderer.invoke(IPC_CHANNELS.UI_PENDING_FLUSH, workspaceId),
     getPendingPrompts: () => ipcRenderer.invoke(IPC_CHANNELS.UI_PENDING_GET),
+    listPendingPrompts: () => ipcRenderer.invoke(IPC_CHANNELS.UI_PENDING_LIST),
     setEditorDirty: (dirty, fileName) =>
       ipcRenderer.send(
         IPC_CHANNELS.UI_EDITOR_DIRTY_SET,

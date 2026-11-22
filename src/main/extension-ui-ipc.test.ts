@@ -16,6 +16,7 @@ const REQUEST_ID = 'req-1'
 /** Status a manager that was never started reports. */
 const STOPPED_STATUS = { status: 'stopped', pid: null, error: null, engine: 'pi', startupPhase: undefined }
 const PENDING_COUNTS: PendingPromptCounts = { [WS_A]: 2, [WS_B]: 1 }
+const PENDING_ITEMS: never[] = []
 
 /** The four channels that answer a blocking extension-UI dialog. */
 const RESPONSE_CHANNELS = [
@@ -34,6 +35,7 @@ const ALL_CHANNELS = [
   ...RESPONSE_CHANNELS,
   IPC_CHANNELS.UI_PENDING_FLUSH,
   IPC_CHANNELS.UI_PENDING_GET,
+  IPC_CHANNELS.UI_PENDING_LIST,
 ]
 
 /** Stand-in for IpcMainInvokeEvent: only the sender check ever reads it. */
@@ -68,11 +70,16 @@ interface Harness {
 function recordingRouter(calls: RouterCall[]): PiEventRouter {
   return {
     attachManager: (manager) => calls.push({ method: 'attachManager', args: [manager] }),
-    respond: (id, response) => calls.push({ method: 'respond', args: [id, response] }),
+    respond: (id, response, runtimeId) =>
+      calls.push({ method: 'respond', args: runtimeId === undefined ? [id, response] : [id, response, runtimeId] }),
     flush: (workspaceId) => calls.push({ method: 'flush', args: [workspaceId] }),
     getPendingCounts: () => {
       calls.push({ method: 'getPendingCounts', args: [] })
       return PENDING_COUNTS
+    },
+    listPendingPrompts: () => {
+      calls.push({ method: 'listPendingPrompts', args: [] })
+      return PENDING_ITEMS
     },
     handleActiveWorkspaceChanged: () =>
       calls.push({ method: 'handleActiveWorkspaceChanged', args: [] }),
@@ -90,6 +97,7 @@ function createHarness(): Harness {
   const workspace: ExtensionUiWorkspace = {
     getActivePiManager: () => activePi,
     workspaceIdFor: () => null,
+    runtimeIdFor: () => null,
     sessionPathFor: () => null,
     onPiManager: (listener) => managerListeners.push(listener),
     onActiveWorkspaceChanged: (listener) => activeListeners.push(() => listener(null)),
@@ -151,6 +159,23 @@ test('the confirm channel forwards a boolean, whatever the renderer sent', async
   ])
 })
 
+test('dialog responses can bind to a runtime for collision-safe routing', async () => {
+  const h = createHarness()
+  await h.invoke(IPC_CHANNELS.UI_INPUT_RESPONSE, TRUSTED, REQUEST_ID, 'answer', 'runtime-b')
+  assert.deepEqual(h.routerCalls, [
+    { method: 'respond', args: [REQUEST_ID, { value: 'answer' }, 'runtime-b'] },
+  ])
+})
+
+test('dialog responses reject a non-string runtime id', async () => {
+  const h = createHarness()
+  await assert.rejects(
+    h.invoke(IPC_CHANNELS.UI_INPUT_RESPONSE, TRUSTED, REQUEST_ID, 'answer', 42),
+    /runtimeId must be a string/
+  )
+  assert.deepEqual(h.routerCalls, [])
+})
+
 test('response channels reject a non-string id without touching the router', async () => {
   for (const channel of RESPONSE_CHANNELS) {
     const h = createHarness()
@@ -191,6 +216,12 @@ test('the flush channel rejects a non-string workspaceId', async () => {
 test('the pending-get channel returns the router counts', async () => {
   const h = createHarness()
   assert.deepEqual(await h.invoke(IPC_CHANNELS.UI_PENDING_GET, TRUSTED), PENDING_COUNTS)
+})
+
+test('the pending-list channel returns retained prompt items', async () => {
+  const h = createHarness()
+  assert.deepEqual(await h.invoke(IPC_CHANNELS.UI_PENDING_LIST, TRUSTED), PENDING_ITEMS)
+  assert.deepEqual(h.routerCalls, [{ method: 'listPendingPrompts', args: [] }])
 })
 
 // --- Manager and activation hooks ---
@@ -251,6 +282,12 @@ function createRouterHarness(workspaceIds: string[]): RouterHarness {
     workspaceIdFor: (manager) => {
       for (const [workspaceId, candidate] of managers) {
         if (candidate === manager) return workspaceId
+      }
+      return null
+    },
+    runtimeIdFor: (manager) => {
+      for (const [workspaceId, candidate] of managers) {
+        if (candidate === manager) return `runtime-${workspaceId}`
       }
       return null
     },

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { AlertCircle, ArrowUpRight, CheckCircle2, Circle, Inbox, Loader2, Play, RefreshCw, XCircle } from 'lucide-react'
 import { clsx } from 'clsx'
@@ -7,8 +7,11 @@ import { DEFAULT_AGENT_ENGINE_LABEL, agentEngineLabel } from '../../../shared/ag
 import { getSessionTitle } from '../utils/session-title'
 import { pathsEqual } from '../../../shared/path-compare'
 import { canResumeRun } from '../utils/workflow-runs'
+import { createStaleGuard } from '../utils/stale-guard'
 import { SessionRuntimeIndicator } from './session-runtime-indicator'
-import type { SessionRuntimeInfo, WorkflowRunStatus, WorkflowRunSummary } from '../../../shared/ipc-contracts'
+import type { PendingPromptItem, SessionRuntimeInfo, WorkflowRunStatus, WorkflowRunSummary } from '../../../shared/ipc-contracts'
+import { PendingPromptCard } from './pending-prompt-card'
+import { isPendingPromptAlreadyOpen, pendingPromptResponse, type PendingPromptAnswer } from '../utils/pending-prompt'
 import type { Translate } from '../../../shared/i18n'
 
 const WORKFLOW_STATUS_KEYS = {
@@ -20,6 +23,9 @@ const WORKFLOW_STATUS_KEYS = {
   aborted: 'missionControl.workflowStatus.aborted',
   unknown: 'missionControl.workflowStatus.unknown',
 } as const satisfies Record<WorkflowRunStatus, string>
+
+/** One guard for the inbox's overlapping list loads (module scope: stable). */
+const pendingPromptLoads = createStaleGuard()
 
 export function MissionControl(): React.JSX.Element {
   const { t } = useTranslation()
@@ -36,12 +42,46 @@ export function MissionControl(): React.JSX.Element {
   const openWorkflowRunsForWorkspace = useAppStore((state) => state.openWorkflowRunsForWorkspace)
   const [controlBusy, setControlBusy] = useState<string | null>(null)
   const [controlError, setControlError] = useState<string | null>(null)
+  const [pendingPromptItems, setPendingPromptItems] = useState<PendingPromptItem[]>([])
+  const [pendingPromptLoadFailed, setPendingPromptLoadFailed] = useState(false)
+  const [pendingPromptReplyFailed, setPendingPromptReplyFailed] = useState(false)
+  const [pendingPromptBusy, setPendingPromptBusy] = useState<string | null>(null)
+  const extensionUiRequest = useAppStore((state) => state.extensionUiRequest)
+  const activeSessionRuntimeId = useAppStore((state) => state.activeSessionRuntimeId)
+  const pendingPromptCounts = useAppStore((state) => state.pendingPromptCounts)
+  const remotePromptIds = useAppStore((state) => state.remotePromptIds)
+
+  const refreshPendingPromptItems = useCallback(async (): Promise<void> => {
+    const isLatest = pendingPromptLoads.begin()
+    try {
+      const items = await window.piDesktop.ui.listPendingPrompts()
+      // Polling, a counts push, and a reply can overlap; a slower older list
+      // must never resurrect a prompt that was just answered.
+      if (!isLatest()) return
+      setPendingPromptItems(items)
+      setPendingPromptLoadFailed(false)
+    } catch {
+      if (isLatest()) setPendingPromptLoadFailed(true)
+    }
+  }, [])
 
   useEffect(() => {
     void refreshWorkflowRuns()
     const timer = window.setInterval(() => void refreshWorkflowRuns(), 5000)
     return () => window.clearInterval(timer)
   }, [refreshWorkflowRuns])
+
+  useEffect(() => {
+    void refreshPendingPromptItems()
+    const timer = window.setInterval(() => void refreshPendingPromptItems(), 2500)
+    return () => window.clearInterval(timer)
+  }, [refreshPendingPromptItems])
+
+  // Main pushes counts the moment a prompt arrives, moves, or is answered, so
+  // refresh the detailed list then instead of waiting for the next poll tick.
+  useEffect(() => {
+    void refreshPendingPromptItems()
+  }, [pendingPromptCounts, refreshPendingPromptItems])
 
   const runtimes = useMemo(
     () => Object.values(sessionRuntimes)
@@ -96,6 +136,51 @@ export function MissionControl(): React.JSX.Element {
     if (useAppStore.getState().activeSessionRuntimeId === runtime.runtimeId) setCurrentView('diff')
   }
 
+  const openPendingPromptSession = async (item: PendingPromptItem): Promise<void> => {
+    const runtime = sessionRuntimes[item.runtimeId]
+    if (runtime?.sessionPath) {
+      await openRuntime(runtime)
+      return
+    }
+    const workspace = workspaces.find((candidate) => candidate.id === item.workspaceId)
+    if (!workspace) return
+    const session = item.sessionPath
+      ? sessionList.find((candidate) => pathsEqual(candidate.path, item.sessionPath!))
+      : undefined
+    if (session) {
+      await openSessionItem(session)
+      return
+    }
+    if (!(await activateWorkspace(workspace.id, { awaitingSession: item.sessionPath !== null }))) return
+    if (item.sessionPath) await switchSession(item.sessionPath, workspace.path)
+    setCurrentView('chat')
+  }
+
+  const answerPendingPrompt = async (item: PendingPromptItem, answer: PendingPromptAnswer): Promise<void> => {
+    const key = `${item.runtimeId}:${item.request.id}`
+    if (pendingPromptBusy !== null) return
+    setPendingPromptBusy(key)
+    setPendingPromptReplyFailed(false)
+    try {
+      const response = pendingPromptResponse(item.request.method, answer)
+      if (!response) return
+      if (response.kind === 'confirm') {
+        await window.piDesktop.ui.respondConfirm(item.request.id, response.confirmed, item.runtimeId)
+      } else {
+        // Match the current ExtensionUiDialog path: value-bearing prompts all
+        // use the RPC { value } response shape.
+        await window.piDesktop.ui.respondInput(item.request.id, response.value, item.runtimeId)
+      }
+      setPendingPromptItems((current) => current.filter((candidate) =>
+        candidate.request.id !== item.request.id || candidate.runtimeId !== item.runtimeId
+      ))
+    } catch {
+      setPendingPromptReplyFailed(true)
+    } finally {
+      setPendingPromptBusy(null)
+    }
+  }
+
   return (
     <div className="flex-1 overflow-y-auto">
       <div className="mx-auto max-w-5xl px-6 py-7">
@@ -104,6 +189,8 @@ export function MissionControl(): React.JSX.Element {
             <div className="flex items-center gap-2">
               <Inbox size={19} className="text-accent-fg" />
               <h1 className="text-lg font-semibold text-primary">{t('missionControl.title')}</h1>
+              {/* Pending prompts already count their runtime as needs-approval, so
+                  the badge adds only the prompts of runtimes that are not counted. */}
               {attentionCount > 0 && (
                 <span className="rounded-full bg-warning-bg px-2 py-0.5 text-[10px] font-medium text-warning">
                   {t('missionControl.needsAttention', { count: attentionCount })}
@@ -115,7 +202,10 @@ export function MissionControl(): React.JSX.Element {
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={() => void refreshWorkflowRuns()}
+              onClick={() => {
+                void refreshWorkflowRuns()
+                void refreshPendingPromptItems()
+              }}
               className="flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-xs text-muted transition-colors hover:bg-surface-hover hover:text-primary"
               title={t('missionControl.refreshWorkflowRuns')}
             >
@@ -132,6 +222,54 @@ export function MissionControl(): React.JSX.Element {
             </button>
           </div>
         </div>
+
+        <section className="mb-6">
+          <SectionHeading
+            title={t('missionControl.pendingPrompts')}
+            count={pendingPromptItems.length}
+          />
+          {pendingPromptReplyFailed && (
+            <p role="alert" className="mb-2 flex items-center gap-1.5 text-xs text-danger">
+              <AlertCircle size={13} /> {t('missionControl.promptReplyFailed')}
+            </p>
+          )}
+          {pendingPromptLoadFailed && pendingPromptItems.length === 0 ? (
+            <EmptyState>{t('missionControl.promptLoadFailed')}</EmptyState>
+          ) : pendingPromptItems.length === 0 ? (
+            <EmptyState>{t('missionControl.noPendingPrompts')}</EmptyState>
+          ) : (
+            <div className="grid gap-2 md:grid-cols-2">
+              {pendingPromptItems.map((item) => {
+                const workspace = workspaces.find((candidate) => candidate.id === item.workspaceId)
+                const session = item.sessionPath
+                  ? sessionList.find((candidate) => pathsEqual(candidate.path, item.sessionPath!))
+                  : undefined
+                const sessionTitle = session
+                  ? getSessionTitle(session.name, session.sessionId, session.preview)
+                  : item.sessionPath?.split(/[\\/]/).pop() ?? t('missionControl.startingSession')
+                const alreadyOpen = isPendingPromptAlreadyOpen(
+                  item,
+                  extensionUiRequest,
+                  activeSessionRuntimeId,
+                  remotePromptIds
+                )
+                const busy = pendingPromptBusy === `${item.runtimeId}:${item.request.id}`
+                return (
+                  <PendingPromptCard
+                    key={`${item.runtimeId}:${item.request.id}`}
+                    item={item}
+                    workspaceName={workspace?.name ?? t('missionControl.unknownProject')}
+                    sessionTitle={sessionTitle}
+                    alreadyOpen={alreadyOpen}
+                    busy={busy}
+                    onOpenSession={() => void openPendingPromptSession(item)}
+                    onAnswer={(answer) => void answerPendingPrompt(item, answer)}
+                  />
+                )
+              })}
+            </div>
+          )}
+        </section>
 
         <section className="mb-6">
           <SectionHeading title={t('missionControl.liveSessions')} count={runtimes.length} />

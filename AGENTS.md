@@ -216,13 +216,15 @@ src/
         │   ├── preview-load-error.ts # Preview load/save failure kept as data, translated at render
         │   ├── chat-width.ts     # Chat column width setting -> message/composer max-width classes
         │   ├── process-status-label.ts # Translated agent process status (status popover, Diagnostics)
+        │   ├── pending-prompt.ts # Inbox reply shapes and the already-open dialog check
         │   └── workflow-runs.ts  # Session id used to scope workflow runs
         └── components/
             ├── sidebar.tsx        # Workspace switcher, nav, sessions grouped by folder, inline rename
             ├── sidebar-session-labels.ts # Session row label helpers
             ├── home-screen.tsx    # Full Home launcher (stats, recents, open folder / new session)
             ├── task-launcher.tsx  # New-task modal that starts a real background session
-            ├── mission-control.tsx # Global live-session and workflow inbox
+            ├── mission-control.tsx # Global live-session, pending-prompt inbox, and workflow view
+            ├── pending-prompt-card.tsx # One cross-session blocking prompt with explicit answers
             ├── git-conveyor-actions.tsx # Git bar: Commit, Commit + Push, Push, PR / Open PR #N, commit dialog
             ├── project-branch-selector.tsx # Status-bar branch menu: switch branch, New branch
             ├── stats-panel.tsx    # Activity stats dashboard on Home
@@ -337,7 +339,7 @@ resources/
 - Project tabs keep creation order until the user drags one to a new place; the custom order is saved (`utils/tab-navigation.ts`), and the project-tab shortcuts follow it
 - Switching to a session from a different project creates that project's workspace if needed
 - **Drag and drop a folder** onto the window to open it as a project (create the workspace if needed, switch, show Chat); this is the same path as File > Open Project
-- Mission Control summarizes all live session runtimes and workflow runs across projects; New Task sends a prompt to a dedicated background runtime
+- Mission Control summarizes all live session runtimes and workflow runs across projects, and lists every pending approval prompt from any session runtime so it can be answered (explicit buttons only) without switching to that project; New Task sends a prompt to a dedicated background runtime
 
 ### Session management
 
