@@ -666,7 +666,8 @@
       "pinnedOrNotFromNpm": "{{spec}} 已固定版本，或并非从 npm 安装，因此无法在此更新。",
       "updateCancelled": "更新已取消",
       "updateExited": "更新失败（{{reason}}）",
-      "updateTimedOut": "更新超时"
+      "updateTimedOut": "更新在 {{minutes}} 分钟后超时，可能在中途被中断——请重新运行。",
+      "updateTimedOutSeconds": "更新在 {{seconds}} 秒后超时，可能在中途被中断——请重新运行。"
     },
     "permissionRules": {
       "fileTooLarge": "规则文件过大（上限 {{limit}} 字节）"

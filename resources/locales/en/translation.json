@@ -682,7 +682,8 @@
       "pinnedOrNotFromNpm": "{{spec}} is pinned or was not installed from npm, so it cannot be updated here.",
       "updateCancelled": "Update cancelled",
       "updateExited": "The update failed ({{reason}})",
-      "updateTimedOut": "The update timed out"
+      "updateTimedOut": "The update timed out after {{minutes}} min. It may have been interrupted mid-way — run it again.",
+      "updateTimedOutSeconds": "The update timed out after {{seconds}} s. It may have been interrupted mid-way — run it again."
     },
     "permissionRules": {
       "fileTooLarge": "rules file too large (limit {{limit}} bytes)"

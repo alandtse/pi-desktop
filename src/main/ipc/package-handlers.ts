@@ -174,8 +174,15 @@ const LIST_TIMEOUT_MS = 30_000
 const INSTALL_TIMEOUT_MS = 120_000
 const REMOVE_TIMEOUT_MS = 30_000
 const UPDATE_TIMEOUT_MS = 120_000
-// Updating every package runs one install per outdated package.
-const UPDATE_ALL_TIMEOUT_MS = 300_000
+/**
+ * Updating every package runs one install per outdated package, then replaces
+ * the engine's own CLI — two long npm operations back to back. 5 minutes was
+ * enough for neither: a 14-package run spent the whole budget on the extension
+ * install and was killed before `pi update --all` reached its self-update half,
+ * so the CLI stayed on the old version and the run looked like it had done
+ * nothing. Measured here: ~5 min for the extensions, ~25 s for the CLI.
+ */
+const UPDATE_ALL_TIMEOUT_MS = 1_800_000
 
 const OMP_PLUGIN_LIST_ARGS = ['plugin', 'list', '--json']
 // Without a plugin id, OMP upgrades every outdated marketplace plugin.

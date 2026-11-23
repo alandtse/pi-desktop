@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { runPiCli, stripAnsi, takeLines } from './run-pi-cli'
@@ -65,4 +65,37 @@ test('takeLines drops blank lines, repeats and over-long lines', () => {
   const long = 'x'.repeat(1_000)
   const [line] = takeLines('', `${long}\n`).lines
   assert.equal(line.length, 400)
+})
+
+test('a streamed run that exceeds its budget reports the timeout and keeps its output', async () => {
+  // A real, slow-but-alive executable: the point is the timeout path, not the
+  // CLI. `sleep` is on every POSIX system; the test is skipped on Windows.
+  if (process.platform === 'win32') return
+  const dir = mkdtempSync(join(tmpdir(), 'pi-cli-timeout-'))
+  const script = join(dir, 'slow-pi.sh')
+  writeFileSync(script, '#!/bin/sh\necho "starting work"\nsleep 30\n', { mode: 0o755 })
+  const savedPath = process.env.PATH
+  const savedShell = process.env.SHELL
+  try {
+    process.env.PATH = `${dir}:/usr/bin:/bin`
+    process.env.SHELL = '/bin/sh'
+    setPiExecutableOverride(script, 'pi')
+    const lines: string[] = []
+    // The budget must outlast process + shell startup so the first line lands
+    // before the inactivity timer fires; the script then stays quiet for 30 s.
+    const result = await runPiCli(['update', '--all'], dir, 2_500, 'pi', {
+      onLine: (line) => lines.push(line),
+    })
+    assert.equal(result.success, false)
+    // The partial output survives, so a killed run is not mistaken for silence.
+    assert.match(result.output, /starting work/)
+    assert.match(result.output, /timed out after 3 s|timed out after 2 s/)
+    assert.deepEqual(lines, ['starting work'])
+  } finally {
+    setPiExecutableOverride(null, 'auto')
+    process.env.PATH = savedPath
+    if (savedShell === undefined) delete process.env.SHELL
+    else process.env.SHELL = savedShell
+    rmSync(dir, { recursive: true, force: true })
+  }
 })

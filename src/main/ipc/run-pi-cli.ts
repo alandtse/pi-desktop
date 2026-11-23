@@ -157,6 +157,11 @@ function runStreaming(
     })
 
     const emitLines = (chunk: string): void => {
+      // Progress resets the inactivity budget: the number below bounds silence,
+      // not total work. A `pi update --all` legitimately spends minutes inside
+      // npm without printing a line, and a fixed total killed such a run the
+      // moment it reached the half that replaces the CLI itself.
+      if (chunk.length > 0) armTimeout()
       if (!options.onLine) {
         output += chunk
         return
@@ -173,6 +178,7 @@ function runStreaming(
       if (settled) return
       settled = true
       clearTimeout(timer)
+      timer = undefined
       options.signal?.removeEventListener('abort', onAbort)
       // A trailing partial line is still output (chalk-free CLIs may not end
       // with a newline); report it so the last message is never swallowed.
@@ -189,10 +195,20 @@ function runStreaming(
     const onAbort = (): void => finish({ success: false, output: output || t('errors.packages.updateCancelled') })
     options.signal?.addEventListener('abort', onAbort, { once: true })
 
-    const timer = setTimeout(
-      () => finish({ success: false, output: output || t('errors.packages.updateTimedOut') }),
-      timeout
-    )
+    // A timeout must not look like silence: name the budget that ran out and
+    // keep whatever the CLI already printed, so a run killed mid-way is
+    // distinguishable from one that finished and did nothing.
+    let timer: NodeJS.Timeout | undefined
+    const armTimeout = (): void => {
+      clearTimeout(timer)
+      timer = setTimeout(() => {
+        const budget = timeout >= 60_000
+          ? t('errors.packages.updateTimedOut', { minutes: Math.round(timeout / 60_000) })
+          : t('errors.packages.updateTimedOutSeconds', { seconds: Math.round(timeout / 1000) })
+        finish({ success: false, output: output ? `${output}\n${budget}` : budget })
+      }, timeout)
+    }
+    armTimeout()
 
     child.stdout?.setEncoding('utf8')
     child.stderr?.setEncoding('utf8')
