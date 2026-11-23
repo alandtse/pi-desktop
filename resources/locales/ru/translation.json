@@ -1074,6 +1074,7 @@
       "waitingForRuntimes_other": "Ожидание завершения {{count}} выполняющихся ходов перед заменой CLI {{engine}}…"
     },
     "restartAction": "Перезапустить {{engine}}",
+    "restartingAction": "Перезапуск {{engine}}…",
     "tabs": {
       "catalog": "Каталог",
       "installed": "Установленные"

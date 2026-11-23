@@ -493,6 +493,8 @@ interface AppState {
   packageUpdateStartedAt: number | null
   /** Recent CLI output lines of the running mutation, newest last. */
   packageUpdateLines: string[]
+  /** True while a restart is in flight, so the Packages page can show it. */
+  packageRestarting: boolean
 
   // Skills
   installedSkills: InstalledSkill[]
@@ -645,6 +647,8 @@ interface AppActions {
   restartPi: (options?: Record<string, unknown>) => Promise<void>
   /** Restart (or start) the active engine so it loads packages/models changed on disk. */
   restartEngine: () => Promise<void>
+  /** Live phase of that restart, so the Packages page is not silent about it. */
+  packageRestarting: boolean
   // Messages
   addMessage: (message: DisplayMessage) => void
   setMessages: (messages: DisplayMessage[]) => void
@@ -1817,6 +1821,11 @@ async function runPackageMutation(
   try {
     const result = await mutation()
     await get().loadInstalledPackages()
+    // Re-check the registry against what is now on disk. Without this the
+    // "N updates available" badge and the per-row version arrows kept the
+    // pre-update answer until the user pressed Check updates by hand. Done on a
+    // partial failure too: one package may have updated before another failed.
+    await get().checkPackageUpdates()
     set({
       packageNotification: result.success
         ? { type: 'success', message: successMessage }
@@ -1918,6 +1927,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
   packageUpdateProgress: null,
   packageUpdateStartedAt: null,
   packageUpdateLines: [],
+  packageRestarting: false,
 
   installedSkills: [],
 
@@ -2137,11 +2147,20 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
    */
   restartEngine: async () => {
     if (!(await get().confirmSessionChange('restart'))) return
-    if (get().piStatus === 'stopped' || get().piStatus === 'error') {
-      await get().startPi()
-      return
+    // A restart takes a few seconds and kills the engine the whole UI talks to;
+    // without this the Packages page looked like the button did nothing (the
+    // only visible sign was the Sessions tab).
+    set({ packageRestarting: true })
+    try {
+      if (get().piStatus === 'stopped' || get().piStatus === 'error') {
+        await get().startPi()
+      } else {
+        await get().restartPi()
+      }
+      set({ packageNotification: null })
+    } finally {
+      set({ packageRestarting: false })
     }
-    await get().restartPi()
   },
 
   // ─── Messages ─────────────────────────────────────────────────────────
@@ -4787,7 +4806,6 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
       t('store.messages.updatedPackage', { spec }),
       t('store.messages.updatePackageFailed'),
     )
-    await get().checkPackageUpdates()
   },
 
   updateAllPackages: async () => {
@@ -4798,7 +4816,6 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
       t('store.messages.updatedAllPackages'),
       t('store.messages.updatePackageFailed'),
     )
-    await get().checkPackageUpdates()
   },
 
   cancelPackageUpdate: async () => {

@@ -1032,6 +1032,7 @@
       "waitingForRuntimes_other": "Waiting for {{count}} running turns to finish before replacing the {{engine}} CLI…"
     },
     "restartAction": "Restart {{engine}}",
+    "restartingAction": "Restarting {{engine}}…",
     "tabs": {
       "catalog": "Catalog",
       "installed": "Installed"

@@ -43,6 +43,7 @@ export function PackageBrowser(): React.JSX.Element {
   const loadCatalog = useAppStore((state) => state.loadCatalog)
   const clearPackageNotification = useAppStore((state) => state.clearPackageNotification)
   const restartEngine = useAppStore((state) => state.restartEngine)
+  const packageRestarting = useAppStore((state) => state.packageRestarting)
   // Named in the notification: which engine restarts to load the packages is
   // the one the actions ran against, not necessarily the configured default.
   const engineLabel = agentEngineLabel(useAppStore((state) => state.piEngine))
@@ -128,6 +129,16 @@ export function PackageBrowser(): React.JSX.Element {
         <PackageUpdateProgressPanel />
       </div>
 
+      {/* A restart replaces the engine every panel talks to. It is fast, but
+          silence here read as "the button did nothing" — the only visible sign
+          was the Sessions tab changing. */}
+      {packageRestarting && (
+        <div className="flex items-center gap-2 border-b border-border bg-accent-bg/40 px-4 py-2.5 text-xs text-secondary">
+          <Loader2 size={13} className="animate-spin shrink-0 text-accent-fg" />
+          <span>{t('packages.restartingAction', { engine: engineLabel })}</span>
+        </div>
+      )}
+
       {/* Notification banner */}
       {packageNotification && (
         <div className={clsx(
@@ -148,11 +159,17 @@ export function PackageBrowser(): React.JSX.Element {
             <button
               type="button"
               onClick={() => void restartEngine()}
-              disabled={packageLoading}
+              disabled={packageLoading || packageRestarting}
               className="flex shrink-0 items-center gap-1 rounded border border-success-bg px-2 py-0.5 text-[11px] transition-colors hover:bg-success-bg/30 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <RefreshCw size={11} />
-              {t('packages.restartAction', { engine: engineLabel })}
+              {packageRestarting ? (
+                <Loader2 size={11} className="animate-spin" />
+              ) : (
+                <RefreshCw size={11} />
+              )}
+              {packageRestarting
+                ? t('packages.restartingAction', { engine: engineLabel })
+                : t('packages.restartAction', { engine: engineLabel })}
             </button>
           )}
           <button

@@ -1012,6 +1012,7 @@
       "waitingForRuntimes_other": "正在等待 {{count}} 个进行中的回合结束，然后替换 {{engine}} CLI…"
     },
     "restartAction": "重启 {{engine}}",
+    "restartingAction": "正在重启 {{engine}}…",
     "tabs": {
       "catalog": "软件目录",
       "installed": "已安装"
