@@ -22,6 +22,7 @@ import {
   CircleArrowUp,
 } from 'lucide-react'
 import { isImeComposing } from '../utils/ime-composing'
+import { agentEngineLabel } from '../../../shared/agent-engine-label'
 import { PackageUpdateProgressPanel } from './package-update-progress'
 
 export function PackageBrowser(): React.JSX.Element {
@@ -41,6 +42,10 @@ export function PackageBrowser(): React.JSX.Element {
   const checkPackageUpdates = useAppStore((state) => state.checkPackageUpdates)
   const loadCatalog = useAppStore((state) => state.loadCatalog)
   const clearPackageNotification = useAppStore((state) => state.clearPackageNotification)
+  const restartEngine = useAppStore((state) => state.restartEngine)
+  // Named in the notification: which engine restarts to load the packages is
+  // the one the actions ran against, not necessarily the configured default.
+  const engineLabel = agentEngineLabel(useAppStore((state) => state.piEngine))
   const installedSkills = useAppStore((state) => state.installedSkills)
   const loadSkills = useAppStore((state) => state.loadSkills)
 
@@ -136,6 +141,20 @@ export function PackageBrowser(): React.JSX.Element {
             : <AlertCircle size={15} className="mt-0.5 shrink-0" />
           }
           <span className="flex-1 text-xs leading-relaxed">{packageNotification.message}</span>
+          {/* The success message tells the user to restart to load the change;
+              this is the button that does it. Only on success: after a failure
+              there is nothing new loaded to pick up. */}
+          {packageNotification.type === 'success' && (
+            <button
+              type="button"
+              onClick={() => void restartEngine()}
+              disabled={packageLoading}
+              className="flex shrink-0 items-center gap-1 rounded border border-success-bg px-2 py-0.5 text-[11px] transition-colors hover:bg-success-bg/30 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <RefreshCw size={11} />
+              {t('packages.restartAction', { engine: engineLabel })}
+            </button>
+          )}
           <button
             type="button"
             onClick={clearPackageNotification}

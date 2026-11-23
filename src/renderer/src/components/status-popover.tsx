@@ -66,6 +66,7 @@ export function StatusPopover(): React.JSX.Element {
   const sessionStats = useAppStore((state) => state.sessionStats)
   const activeWorkspace = useAppStore((state) => state.activeWorkspace)
   const compactContext = useAppStore((state) => state.compactContext)
+  const restartEngine = useAppStore((state) => state.restartEngine)
   const isCompacting = sessionState?.isCompacting ?? false
   const ref = useRef<HTMLDivElement>(null)
 
@@ -276,6 +277,16 @@ export function StatusPopover(): React.JSX.Element {
                     <Minimize2 size={12} />
                   )}
                   {isCompacting ? t('status.compactButton.compacting') : t('status.compactButton.compact')}
+                </button>
+                {/* Restarting is how a newly installed package or an edited
+                    models file takes effect: both are read at spawn. */}
+                <button
+                  onClick={() => { void restartEngine() }}
+                  className="mt-1 flex w-full items-center justify-center gap-1.5 rounded-md bg-card px-3 py-1.5 text-xs text-secondary hover:bg-elevated transition-colors"
+                  title={t('status.restartButton.title', { agent: engineLabel })}
+                >
+                  <RefreshCw size={12} />
+                  {t('status.restartButton.restart', { agent: engineLabel })}
                 </button>
               </StatusSection>
             )}

@@ -216,7 +216,7 @@ export interface ConfirmRequest extends ConfirmOptions {
 }
 
 /** The actions that abandon the live turn, by replacing the session, leaving it, or restarting its Pi. */
-export type SessionChangeAction = 'switch' | 'new' | 'fork' | 'clone' | 'workspace' | 'changeFolder' | 'permissionMode'
+export type SessionChangeAction = 'switch' | 'new' | 'fork' | 'clone' | 'workspace' | 'changeFolder' | 'permissionMode' | 'restart'
 
 /**
  * The confirm dialog's message + confirm label for each session-change action.
@@ -248,6 +248,11 @@ function sessionChangePrompt(action: SessionChangeAction): { message: string; co
     // mode is bound at spawn too (tool list, extension env), so the restart ends the turn
     case 'permissionMode':
       return { message: t('store.confirm.permissionModeMessage'), confirmLabel: t('store.confirm.changeAnywayLabel') }
+    // The point of a restart is to reload what the process loaded at spawn
+    // (extensions, models). A turn in flight dies with it — say so plainly
+    // rather than borrowing the wording of a mode change.
+    case 'restart':
+      return { message: t('store.confirm.restartMessage'), confirmLabel: t('store.confirm.restartAnywayLabel') }
   }
 }
 
@@ -638,7 +643,8 @@ interface AppActions {
   openLastSession: () => Promise<boolean>
   stopPi: () => Promise<void>
   restartPi: (options?: Record<string, unknown>) => Promise<void>
-
+  /** Restart (or start) the active engine so it loads packages/models changed on disk. */
+  restartEngine: () => Promise<void>
   // Messages
   addMessage: (message: DisplayMessage) => void
   setMessages: (messages: DisplayMessage[]) => void
@@ -2119,6 +2125,23 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
     } catch (err) {
       set({ piStatus: 'error', piStartupPhase: null, piError: err instanceof Error ? err.message : String(err) })
     }
+  },
+
+  /**
+   * Restart the active session's engine so it loads what changed on disk:
+   * freshly installed or updated packages, and custom models. The Packages view
+   * tells the user to restart; without this there was nothing to click.
+   *
+   * A stopped engine is started rather than restarted — `pi:restart` requires a
+   * live runtime and throws otherwise.
+   */
+  restartEngine: async () => {
+    if (!(await get().confirmSessionChange('restart'))) return
+    if (get().piStatus === 'stopped' || get().piStatus === 'error') {
+      await get().startPi()
+      return
+    }
+    await get().restartPi()
   },
 
   // ─── Messages ─────────────────────────────────────────────────────────

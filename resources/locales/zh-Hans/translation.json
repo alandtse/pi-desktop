@@ -1011,6 +1011,7 @@
       "waitingForRuntimes_one": "正在等待 {{count}} 个进行中的回合结束，然后替换 {{engine}} CLI…",
       "waitingForRuntimes_other": "正在等待 {{count}} 个进行中的回合结束，然后替换 {{engine}} CLI…"
     },
+    "restartAction": "重启 {{engine}}",
     "tabs": {
       "catalog": "软件目录",
       "installed": "已安装"
@@ -1748,6 +1749,10 @@
     "promptTemplatesSection": {
       "title": "提示词模板"
     },
+    "restartButton": {
+      "restart": "重启 {{agent}}",
+      "title": "重启 {{agent}} 以加载磁盘上更改的包和模型"
+    },
     "row": {
       "cost": "费用",
       "error": "错误",
@@ -1823,6 +1828,8 @@
       "permissionModeMessage": "Pi 在此会话中尚未完成响应。更改权限模式会重启 Pi，从而中止它：Pi 已写入会话的内容会保留，但响应的其余部分（包括仍在运行的工具调用）将被丢弃。",
       "removeWorkspaceMessage": "从侧边栏移除“{{name}}”？其 Pi 进程会停止；磁盘上的文件不受影响。",
       "removeWorkspaceTitle": "移除工作区",
+      "restartAnywayLabel": "仍然重启",
+      "restartMessage": "重启代理会终止当前正在运行的回合。已写入本会话的内容会保留，但其余回复（包括仍在运行的工具调用）将被丢弃。",
       "startAnywayLabel": "仍然启动",
       "stillWorkingTitle": "Pi 仍在工作",
       "switchAnywayLabel": "仍然切换",

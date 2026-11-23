@@ -1031,6 +1031,7 @@
       "waitingForRuntimes_one": "Waiting for {{count}} running turn to finish before replacing the {{engine}} CLI…",
       "waitingForRuntimes_other": "Waiting for {{count}} running turns to finish before replacing the {{engine}} CLI…"
     },
+    "restartAction": "Restart {{engine}}",
     "tabs": {
       "catalog": "Catalog",
       "installed": "Installed"
@@ -1781,6 +1782,10 @@
     "promptTemplatesSection": {
       "title": "Prompt Templates"
     },
+    "restartButton": {
+      "restart": "Restart {{agent}}",
+      "title": "Restart {{agent}} so it loads packages and models changed on disk"
+    },
     "row": {
       "cost": "Cost",
       "error": "Error",
@@ -1859,6 +1864,8 @@
       "permissionModeMessage": "Pi has not finished responding in this session. Changing the permission mode restarts Pi, which stops it: whatever Pi already wrote to the session is kept, but the rest of the response — including any tool calls still running — is discarded.",
       "removeWorkspaceMessage": "Remove \"{{name}}\" from the sidebar? Its Pi process stops; files on disk are not touched.",
       "removeWorkspaceTitle": "Remove workspace",
+      "restartAnywayLabel": "Restart anyway",
+      "restartMessage": "Restarting the agent stops the turn it is running. Whatever it already wrote to this session is kept, but the rest of the response — including any tool calls still running — is discarded.",
       "startAnywayLabel": "Start anyway",
       "stillWorkingTitle": "Pi is still working",
       "switchAnywayLabel": "Switch anyway",
