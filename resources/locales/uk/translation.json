@@ -1061,14 +1061,16 @@
       "hideLog": "Приховати вивід",
       "noOutputYet": "Поки немає виводу. Це може тривати хвилину.",
       "preparing": "Підготовка…",
+      "proceed": "Оновити попри це",
+      "proceedHint": "Не чекати й оновити зараз. Запущений хід може завершитися помилкою після заміни CLI.",
       "running": "Оновлення {{target}}…",
       "runningAll": "Оновлення всіх пакетів…",
       "showLog": "Показати вивід",
       "step": "{{completed}} з {{total}}",
-      "waitingForRuntimes_one": "Очікування завершення {{count}} активного сеансу перед заміною CLI {{engine}}…",
+      "waitingForRuntimes_one": "Очікування завершення {{count}} ходу, що виконується, перед заміною CLI {{engine}}…",
       "waitingForRuntimes_few": "",
       "waitingForRuntimes_many": "",
-      "waitingForRuntimes_other": "Очікування завершення {{count}} активних сеансів перед заміною CLI {{engine}}…"
+      "waitingForRuntimes_other": "Очікування завершення {{count}} ходів, що виконуються, перед заміною CLI {{engine}}…"
     },
     "tabs": {
       "catalog": "Каталог",

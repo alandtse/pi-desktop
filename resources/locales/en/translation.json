@@ -1021,12 +1021,14 @@
       "hideLog": "Hide output",
       "noOutputYet": "No output yet. This can take a minute.",
       "preparing": "Preparing…",
+      "proceed": "Update anyway",
+      "proceedHint": "Stop waiting and update now. A turn that is running may fail when the CLI is replaced.",
       "running": "Updating {{target}}…",
       "runningAll": "Updating all packages…",
       "showLog": "Show output",
       "step": "{{completed}} of {{total}}",
-      "waitingForRuntimes_one": "Waiting for {{count}} active session to stop before replacing the {{engine}} CLI…",
-      "waitingForRuntimes_other": "Waiting for {{count}} active sessions to stop before replacing the {{engine}} CLI…"
+      "waitingForRuntimes_one": "Waiting for {{count}} running turn to finish before replacing the {{engine}} CLI…",
+      "waitingForRuntimes_other": "Waiting for {{count}} running turns to finish before replacing the {{engine}} CLI…"
     },
     "tabs": {
       "catalog": "Catalog",

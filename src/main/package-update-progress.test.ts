@@ -6,7 +6,9 @@ import {
   cancelPackageUpdate,
   endPackageUpdate,
   getActivePackageUpdateRun,
+  requestSkipRuntimeWait,
   setPackageUpdateEmitter,
+  shouldSkipRuntimeWait,
   updatePackageProgress,
 } from './package-update-progress'
 
@@ -93,6 +95,31 @@ test('a new run aborts the previous one and ignores its late events', () => {
     assert.equal(events[events.length - 1].line, 'fresh')
     endPackageUpdate(second, { success: false, error: 'boom' })
     assert.equal(events[events.length - 1].error, 'boom')
+  } finally {
+    restore()
+  }
+})
+test('proceeding skips the runtime wait only for the run it was asked in', () => {
+  const { restore } = collector()
+  try {
+    const run = beginPackageUpdate('pi', 'all')
+    assert.equal(shouldSkipRuntimeWait(run), false, 'the wait holds by default')
+    assert.equal(requestSkipRuntimeWait(), true)
+    assert.equal(shouldSkipRuntimeWait(run), true)
+    endPackageUpdate(run, { success: true })
+
+    const next = beginPackageUpdate('pi', 'all')
+    assert.equal(shouldSkipRuntimeWait(next), false, 'the choice does not carry over')
+    endPackageUpdate(next, { success: true })
+  } finally {
+    restore()
+  }
+})
+
+test('proceeding with nothing running reports that there was nothing to skip', () => {
+  const { restore } = collector()
+  try {
+    assert.equal(requestSkipRuntimeWait(), false)
   } finally {
     restore()
   }

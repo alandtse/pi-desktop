@@ -10,7 +10,9 @@ import {
   beginPackageUpdate,
   cancelPackageUpdate,
   endPackageUpdate,
+  requestSkipRuntimeWait,
   setPackageUpdateEmitter,
+  shouldSkipRuntimeWait,
   updatePackageProgress,
   type PackageUpdateRun,
 } from '../package-update-progress'
@@ -24,6 +26,7 @@ import {
   ompUpdateInstallSpec,
   piRegistryQuery,
   PI_UPDATE_ALL_ARGS,
+  runtimesBlockingUpdate,
   type OmpNpmTarget,
   type OmpRegistryQuery,
   type UpdateCandidate,
@@ -93,9 +96,11 @@ export function registerPackageHandlers(ctx: IpcContext): void {
     const engine = activeEngine()
     const run = beginPackageUpdate(engine, 'all')
     try {
-      // Replacing the Pi CLI (and the shared npm tree its packages live in)
-      // while a session runtime has it loaded is what this wait prevents, and
-      // it is also what made the old silent version look hung: name that state.
+      // A turn in flight is what this wait protects: replacing the CLI (and the
+      // shared npm tree its packages live in) mid-turn breaks that turn. An
+      // idle open session tab is NOT a reason to wait — its child process
+      // outlives the turn — and waiting on that made the old silent version
+      // look hung forever.
       if (engine === 'pi' && !(await waitForAgentRuntimesToStop(workspaceManager, run))) {
         return { success: false, output: t('errors.packages.updateCancelled') }
       }
@@ -112,6 +117,11 @@ export function registerPackageHandlers(ctx: IpcContext): void {
   ipcMain.handle(IPC_CHANNELS.PACKAGE_UPDATE_CANCEL, async (event) => {
     assertTrustedSender(event)
     return cancelPackageUpdate()
+  })
+
+  ipcMain.handle(IPC_CHANNELS.PACKAGE_UPDATE_PROCEED, async (event) => {
+    assertTrustedSender(event)
+    return requestSkipRuntimeWait()
   })
 
   ipcMain.handle(IPC_CHANNELS.PACKAGE_CHECK_UPDATES, async () => {
@@ -140,8 +150,8 @@ function streamOptions(run: PackageUpdateRun): PiCliStreamOptions {
 }
 
 /**
- * Defer replacement of the CLI/package installation until no agent process uses
- * it, reporting a live count so the UI can say what it is waiting for.
+ * Defer replacement of the CLI/package installation until no agent turn is in
+ * flight, reporting a live count so the UI can say what it is waiting for.
  * Returns false when the user cancelled during the wait.
  */
 async function waitForAgentRuntimesToStop(
@@ -150,9 +160,10 @@ async function waitForAgentRuntimesToStop(
 ): Promise<boolean> {
   for (;;) {
     if (run.controller.signal.aborted) return false
-    const waitingRuntimes = workspaceManager.getSessionRuntimes().filter((runtime) =>
-      runtime.status === 'starting' || runtime.status === 'running'
-    ).length
+    // The user asked to update now rather than wait: their call, and the panel
+    // told them a turn is in flight.
+    if (shouldSkipRuntimeWait(run)) return true
+    const waitingRuntimes = runtimesBlockingUpdate(workspaceManager.getSessionRuntimes())
     if (waitingRuntimes === 0) return true
     updatePackageProgress(run, { phase: 'waiting-for-runtimes', waitingRuntimes })
     await new Promise<void>((resolve) => setTimeout(resolve, 1_000))

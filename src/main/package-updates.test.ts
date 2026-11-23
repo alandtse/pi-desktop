@@ -11,6 +11,7 @@ import {
   piRegistryQuery,
   PI_UPDATE_ALL_ARGS,
   registryVersionUrl,
+  runtimesBlockingUpdate,
   type OmpRegistryQuery,
   type RegistryQuery,
 } from './package-updates'
@@ -151,4 +152,26 @@ test('ompNpmTargets reports a failed plugin list instead of an empty one', () =>
     () => ompNpmTargets({ success: false, output: 'omp: timed out' }, {}),
     (error: unknown) => error instanceof OmpPluginListError && error.detail === 'omp: timed out'
   )
+})
+
+test('an idle open session tab does not block an update, a working turn does', () => {
+  // The bug this guards: `status` stays 'running' for as long as the session tab
+  // is open, so waiting on it never ended. An idle session holds no turn.
+  assert.equal(runtimesBlockingUpdate([
+    { status: 'running', activity: null },
+    { status: 'running', activity: 'completed' },
+    { status: 'stopped', activity: null },
+  ]), 0)
+
+  // A turn in flight is the real reason not to swap the CLI underneath it.
+  assert.equal(runtimesBlockingUpdate([
+    { status: 'running', activity: 'working' },
+    { status: 'running', activity: null },
+  ]), 1)
+
+  // A process still coming up counts too: it may start a turn at any moment.
+  assert.equal(runtimesBlockingUpdate([
+    { status: 'starting', activity: null },
+    { status: 'running', activity: 'needs-approval' },
+  ]), 1)
 })

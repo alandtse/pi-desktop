@@ -819,6 +819,7 @@ interface AppActions {
   updatePackage: (spec: string) => Promise<void>
   updateAllPackages: () => Promise<void>
   cancelPackageUpdate: () => Promise<void>
+  proceedWithPackageUpdate: () => Promise<void>
   /** Fold one progress event from main into the store. */
   applyPackageUpdateProgress: (progress: PackageUpdateProgress) => void
   checkPackageUpdates: () => Promise<void>
@@ -4782,6 +4783,14 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
       await window.piDesktop.packages.cancelUpdate()
     } catch {
       // The run has already ended: the UI settles from its own final event.
+    }
+  },
+
+  proceedWithPackageUpdate: async () => {
+    try {
+      await window.piDesktop.packages.proceedWithUpdate()
+    } catch {
+      // Same: the run ended between the click and the request.
     }
   },
 

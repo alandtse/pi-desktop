@@ -152,6 +152,8 @@ export const IPC_CHANNELS = {
   PACKAGE_UPDATE_ALL: 'package:update-all',
   /** Ask main to abort the running update; safe when nothing runs. */
   PACKAGE_UPDATE_CANCEL: 'package:update-cancel',
+  /** Stop waiting for agent runtimes and update despite a turn in flight. */
+  PACKAGE_UPDATE_PROCEED: 'package:update-proceed',
   PACKAGE_CHECK_UPDATES: 'package:check-updates',
   PACKAGE_CATALOG_FETCH: 'package:catalog-fetch',
 

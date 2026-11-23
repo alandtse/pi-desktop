@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Ban, ChevronDown, ChevronRight, Loader2 } from 'lucide-react'
+import { Ban, ChevronDown, ChevronRight, FastForward, Loader2 } from 'lucide-react'
 import clsx from 'clsx'
 import type { PackageUpdateProgress } from '../../../shared/ipc-contracts'
 import type { Translate } from '../../../shared/i18n'
@@ -13,10 +13,11 @@ const TICK_MS = 1_000
 /**
  * What "Update all" is doing right now.
  *
- * It used to show nothing at all: main first waits — indefinitely — for every
- * agent session to stop so the Pi CLI can be replaced, then runs npm/pi without
- * forwarding a line, and the Installed tab was replaced by a bare spinner. This
- * panel names the phase, counts the runtimes being waited on, streams the CLI's
+ * It used to show nothing at all: main first waited for agent sessions to stop
+ * so the Pi CLI could be replaced — keyed off process status, which an idle open
+ * session tab holds forever — then ran npm/pi without forwarding a line, and the
+ * Installed tab was replaced by a bare spinner. This panel names the phase,
+ * counts the turns being waited on, offers "Update anyway", streams the CLI's
  * own output, shows elapsed time, and offers Cancel.
  */
 export function PackageUpdateProgressPanel(): React.JSX.Element | null {
@@ -26,6 +27,7 @@ export function PackageUpdateProgressPanel(): React.JSX.Element | null {
   const lines = useAppStore((state) => state.packageUpdateLines)
   const busy = useAppStore((state) => state.packageLoading)
   const cancel = useAppStore((state) => state.cancelPackageUpdate)
+  const proceed = useAppStore((state) => state.proceedWithPackageUpdate)
   const [showLog, setShowLog] = useState(false)
   const [cancelling, setCancelling] = useState(false)
   const [now, setNow] = useState(() => Date.now())
@@ -45,6 +47,7 @@ export function PackageUpdateProgressPanel(): React.JSX.Element | null {
     ? formatSubagentDuration(Math.floor((now - startedAt) / TICK_MS) * TICK_MS)
     : null
 
+  const phase = progress.phase
   const label = phaseLabel(progress, t)
   const total = progress.total ?? 0
   const completed = progress.completed ?? 0
@@ -74,18 +77,31 @@ export function PackageUpdateProgressPanel(): React.JSX.Element | null {
             </div>
           )}
         </div>
-        <button
-          type="button"
-          onClick={() => {
-            setCancelling(true)
-            void cancel().finally(() => setCancelling(false))
-          }}
-          disabled={cancelling}
-          className="flex shrink-0 items-center gap-1 rounded px-2 py-1 text-[11px] text-secondary transition-colors hover:bg-highlight-strong hover:text-primary disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          <Ban size={11} />
-          {cancelling ? t('packages.progress.cancelling') : t('packages.progress.cancel')}
-        </button>
+        <div className="flex shrink-0 items-center gap-1">
+          {phase === 'waiting-for-runtimes' && (
+            <button
+              type="button"
+              onClick={() => void proceed()}
+              title={t('packages.progress.proceedHint')}
+              className="flex items-center gap-1 rounded px-2 py-1 text-[11px] text-accent transition-colors hover:bg-highlight-strong"
+            >
+              <FastForward size={11} />
+              {t('packages.progress.proceed')}
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => {
+              setCancelling(true)
+              void cancel().finally(() => setCancelling(false))
+            }}
+            disabled={cancelling}
+            className="flex items-center gap-1 rounded px-2 py-1 text-[11px] text-secondary transition-colors hover:bg-highlight-strong hover:text-primary disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <Ban size={11} />
+            {cancelling ? t('packages.progress.cancelling') : t('packages.progress.cancel')}
+          </button>
+        </div>
       </div>
 
       {/* Determinate when the run knows its steps (OMP), pulsing otherwise:

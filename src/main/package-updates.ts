@@ -186,3 +186,30 @@ export function ompUpdateInstallSpec(query: OmpRegistryQuery, plugin: OmpNpmPlug
 export function explainOmpFailure(output: string): string {
   return output.includes(OMP_MISSING_BUN_MARKER) ? t('errors.packages.missingBun') : output
 }
+
+/**
+ * Runtimes an update must wait for before it replaces the engine CLI on disk.
+ *
+ * `status` is the *process* status: an open session tab keeps a live `pi` child
+ * for as long as the tab exists, whether or not it is doing anything. Waiting on
+ * that never finished — the "Update all" this function replaced sat in that loop
+ * until the user closed every session. What actually holds the CLI open is a
+ * turn in flight (`activity: 'working'`) or a process still coming up.
+ */
+/**
+ * How many runtimes block replacing the engine's CLI right now.
+ *
+ * A turn in flight (`activity === 'working'`) does, because the CLI and the
+ * npm tree its packages live in must not change under it. An open session tab
+ * does not: its child process stays alive as long as the tab exists, so keying
+ * this off process `status === 'running'` made the wait unbounded — the update
+ * appeared to hang waiting for a session to close. `starting` still counts,
+ * because that process is mid-handshake and has no turn signal yet.
+ */
+export function runtimesBlockingUpdate(
+  runtimes: readonly { status: string; activity: string | null }[],
+): number {
+  return runtimes.filter((runtime) =>
+    runtime.status === 'starting' || runtime.activity === 'working'
+  ).length
+}

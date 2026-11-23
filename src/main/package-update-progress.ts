@@ -20,6 +20,11 @@ type Emit = (progress: PackageUpdateProgress) => void
 let nextRunId = 1
 let active: PackageUpdateRun | null = null
 let emit: Emit = () => {}
+/**
+ * Set when the user chooses to update without waiting for agent runtimes.
+ * Reset per run: the choice applies to the run it was made in, not to later ones.
+ */
+let skipRuntimeWait = false
 
 /** Wire the broadcast in once, at IPC registration time. */
 export function setPackageUpdateEmitter(broadcast: Emit): void {
@@ -45,6 +50,7 @@ export function beginPackageUpdate(engine: AgentEngineKind, target: string): Pac
     controller: new AbortController(),
   }
   active = run
+  skipRuntimeWait = false
   report({ runId: run.runId, phase: 'preparing', target, engine })
   return run
 }
@@ -77,6 +83,18 @@ export function endPackageUpdate(
     success: result.success,
     ...(result.error ? { error: result.error } : {}),
   })
+}
+
+/** The user chose to update now instead of waiting for in-flight turns. */
+export function requestSkipRuntimeWait(): boolean {
+  if (!active) return false
+  skipRuntimeWait = true
+  return true
+}
+
+/** Whether the runtime wait for the active run has been waived. */
+export function shouldSkipRuntimeWait(run: PackageUpdateRun): boolean {
+  return skipRuntimeWait && active?.runId === run.runId
 }
 
 /** Abort whatever runs. Returns whether there was something to abort. */

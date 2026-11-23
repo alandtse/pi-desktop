@@ -267,6 +267,8 @@ interface PiDesktopAPI {
     updateAll(): Promise<{ success: boolean; output: string }>
     /** Aborts the running update (its CLI and any npm grandchildren). */
     cancelUpdate(): Promise<boolean>
+    /** Update now instead of waiting for in-flight agent turns. */
+    proceedWithUpdate(): Promise<boolean>
     checkUpdates(): Promise<PackageUpdate[]>
     fetchCatalog(query?: string): Promise<CatalogPackage[]>
     /** Phase and output lines of a package mutation, streamed from main. */
@@ -650,6 +652,7 @@ const api: PiDesktopAPI = {
     update: (spec) => ipcRenderer.invoke(IPC_CHANNELS.PACKAGE_UPDATE, spec),
     updateAll: () => ipcRenderer.invoke(IPC_CHANNELS.PACKAGE_UPDATE_ALL),
     cancelUpdate: () => ipcRenderer.invoke(IPC_CHANNELS.PACKAGE_UPDATE_CANCEL),
+    proceedWithUpdate: () => ipcRenderer.invoke(IPC_CHANNELS.PACKAGE_UPDATE_PROCEED),
     checkUpdates: () => ipcRenderer.invoke(IPC_CHANNELS.PACKAGE_CHECK_UPDATES),
     fetchCatalog: (query) => ipcRenderer.invoke(IPC_CHANNELS.PACKAGE_CATALOG_FETCH, query),
     onUpdateProgress: (callback) => {
