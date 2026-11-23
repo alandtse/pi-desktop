@@ -37,6 +37,7 @@ export function PackageBrowser(): React.JSX.Element {
   const removePackage = useAppStore((state) => state.removePackage)
   const packageUpdates = useAppStore((state) => state.packageUpdates)
   const packageUpdatesChecking = useAppStore((state) => state.packageUpdatesChecking)
+  const packageUpdatesError = useAppStore((state) => state.packageUpdatesError)
   const updatePackage = useAppStore((state) => state.updatePackage)
   const updateAllPackages = useAppStore((state) => state.updateAllPackages)
   const checkPackageUpdates = useAppStore((state) => state.checkPackageUpdates)
@@ -191,6 +192,7 @@ export function PackageBrowser(): React.JSX.Element {
             loading={packageLoading}
             updates={updatesBySource}
             checkingUpdates={packageUpdatesChecking}
+            updatesError={packageUpdatesError}
             onRemove={handleRemove}
             onUpdate={handleUpdate}
             onUpdateAll={handleUpdateAll}
@@ -309,6 +311,7 @@ const InstalledTab = memo(function InstalledTab({
   loading,
   updates,
   checkingUpdates,
+  updatesError,
   onRemove,
   onUpdate,
   onUpdateAll,
@@ -318,6 +321,7 @@ const InstalledTab = memo(function InstalledTab({
   loading: boolean
   updates: Map<string, PackageUpdate>
   checkingUpdates: boolean
+  updatesError: string | null
   onRemove: (spec: string) => void
   onUpdate: (spec: string) => void
   onUpdateAll: () => void
@@ -355,9 +359,11 @@ const InstalledTab = memo(function InstalledTab({
         <span className="text-xs text-dim">
           {checkingUpdates
             ? t('packages.installed.checkingUpdates')
-            : outdatedCount > 0
-              ? t('packages.installed.updatesAvailable', { count: outdatedCount })
-              : ''}
+            : updatesError
+              ? <span className="text-warning">{updatesError}</span>
+              : outdatedCount > 0
+                ? t('packages.installed.updatesAvailable', { count: outdatedCount })
+                : t('packages.installed.upToDate')}
         </span>
         <div className="flex items-center gap-1.5">
           <button

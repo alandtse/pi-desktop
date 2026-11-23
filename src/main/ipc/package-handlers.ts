@@ -17,6 +17,7 @@ import {
   type PackageUpdateRun,
 } from '../package-update-progress'
 import { activeEngineKind } from './active-engine'
+import { appLog } from '../app-log'
 import { parseOmpPluginList, type OmpNpmPlugin } from '../omp-plugin-list'
 import {
   explainOmpFailure,
@@ -127,7 +128,19 @@ export function registerPackageHandlers(ctx: IpcContext): void {
   ipcMain.handle(IPC_CHANNELS.PACKAGE_CHECK_UPDATES, async () => {
     const ws = workspaceManager.getActiveWorkspace()
     const cwd = ws?.path ?? process.cwd()
-    return checkPackageUpdates(cwd, activeEngine())
+    const engine = activeEngine()
+    try {
+      const updates = await checkPackageUpdates(cwd, engine)
+      appLog.info('packages', `Update check (${engine}) found ${updates.length}`)
+      return updates
+    } catch (err) {
+      // A failed check used to reach nobody: the renderer swallowed the
+      // rejection and kept whatever it already had on screen, so a package that
+      // had just been updated went on looking outdated with no way to tell why.
+      const detail = err instanceof Error ? err.message : String(err)
+      appLog.warn('packages', `Update check failed (${engine})`, detail)
+      throw new Error(t('errors.packages.checkFailed', { detail }), { cause: err })
+    }
   })
 
   ipcMain.handle(IPC_CHANNELS.PACKAGE_CATALOG_FETCH, async (_event, query?: unknown) => {

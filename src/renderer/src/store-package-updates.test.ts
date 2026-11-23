@@ -14,6 +14,7 @@ const INSTALLED: InstalledPackage[] = [
 let updates: PackageUpdate[] = []
 let checks = 0
 let mutationSucceeds = true
+let checkThrows = false
 
 type AppStore = typeof import('./store')['useAppStore']
 let useAppStore: AppStore
@@ -25,6 +26,7 @@ before(async () => {
         listInstalled: async () => INSTALLED,
         checkUpdates: async () => {
           checks += 1
+          if (checkThrows) throw new Error('The update check failed: registry unreachable')
           return updates
         },
         updateAll: async () => ({ success: mutationSucceeds, output: mutationSucceeds ? '' : 'boom' }),
@@ -37,12 +39,14 @@ before(async () => {
 beforeEach(() => {
   checks = 0
   mutationSucceeds = true
+  checkThrows = false
   updates = []
   useAppStore.setState({
     installedPackages: INSTALLED,
     packageUpdates: [{ source: 'npm:alpha', installedVersion: '1.0.0', latestVersion: '2.0.0' }],
     packageLoading: false,
     packageNotification: null,
+    packageUpdatesError: null,
   })
 })
 
@@ -82,4 +86,15 @@ test('a restart shows as in flight on the packages page', async () => {
   release()
   await restart
   assert.equal(useAppStore.getState().packageRestarting, false)
+})
+
+test('a failed check says so instead of keeping stale badges', async () => {
+  checkThrows = true
+  await useAppStore.getState().checkPackageUpdates()
+  const state = useAppStore.getState()
+  // Left as it was, the previous answer stayed on screen: the badges described
+  // a registry nobody could reach, which read as "updates still available".
+  assert.deepEqual(state.packageUpdates, [])
+  assert.match(state.packageUpdatesError ?? '', /registry unreachable/)
+  assert.equal(state.packageUpdatesChecking, false)
 })

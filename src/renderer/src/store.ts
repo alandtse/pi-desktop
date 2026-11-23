@@ -487,6 +487,8 @@ interface AppState {
   packageNotification: { type: 'success' | 'error'; message: string } | null
   packageUpdates: PackageUpdate[] // installed packages with a newer registry version
   packageUpdatesChecking: boolean
+  /** Why the last update check failed; null when it succeeded. */
+  packageUpdatesError: string | null
   /** Live state of the running package mutation; null when nothing runs. */
   packageUpdateProgress: PackageUpdateProgress | null
   /** When the running mutation started, for its elapsed-time label. */
@@ -1924,6 +1926,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
   packageNotification: null,
   packageUpdates: [],
   packageUpdatesChecking: false,
+  packageUpdatesError: null,
   packageUpdateProgress: null,
   packageUpdateStartedAt: null,
   packageUpdateLines: [],
@@ -4850,9 +4853,19 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
     set({ packageUpdatesChecking: true })
     try {
       const updates = await window.piDesktop.packages.checkUpdates()
-      if (checkId === latestPackageUpdateCheck) set({ packageUpdates: updates })
-    } catch {
-      // Silent failure: keep the last known result
+      if (checkId !== latestPackageUpdateCheck) return
+      // The check is now authoritative: replace the list rather than merging,
+      // so a package that has been updated loses its stale arrow.
+      set({ packageUpdates: updates, packageUpdatesError: null })
+    } catch (err) {
+      if (checkId !== latestPackageUpdateCheck) return
+      // Never silent. Swallowing this kept the previous answer on screen, so an
+      // updated package went on showing "1.0.0 → 2.0.0" and the tab looked
+      // broken instead of saying the check itself had failed.
+      set({
+        packageUpdates: [],
+        packageUpdatesError: err instanceof Error ? err.message : String(err),
+      })
     } finally {
       if (checkId === latestPackageUpdateCheck) set({ packageUpdatesChecking: false })
     }

@@ -660,6 +660,7 @@
       "titleRequired": "必须填写笔记标题"
     },
     "packages": {
+      "checkFailed": "更新检查失败：{{detail}}",
       "invalidSpec": "无效的包描述",
       "listFailed": "无法读取 OMP 插件列表：{{detail}}",
       "missingBun": "OMP 需要 bun 来安装或更新 npm 插件。请从 https://bun.sh 安装 bun，然后重试。",
@@ -990,6 +991,7 @@
       "updatePackageAria": "更新 {{name}}",
       "updatesAvailable_other": "有 {{count}} 项更新可用",
       "updateToVersion": "更新到 v{{version}}",
+      "upToDate": "所有包均为最新版本",
       "versionUpdateArrow": "v{{from}} → v{{to}}"
     },
     "progress": {

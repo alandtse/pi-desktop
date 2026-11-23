@@ -676,6 +676,7 @@
       "titleRequired": "Note title is required"
     },
     "packages": {
+      "checkFailed": "The update check failed: {{detail}}",
       "invalidSpec": "Invalid package specification",
       "listFailed": "Could not read the OMP plugin list: {{detail}}",
       "missingBun": "OMP needs bun to install or update npm plugins. Install bun from https://bun.sh, then try again.",
@@ -1010,6 +1011,7 @@
       "updatesAvailable_one": "{{count}} update available",
       "updatesAvailable_other": "{{count}} updates available",
       "updateToVersion": "Update to v{{version}}",
+      "upToDate": "All packages are up to date",
       "versionUpdateArrow": "v{{from}} → v{{to}}"
     },
     "progress": {

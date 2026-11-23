@@ -708,6 +708,7 @@
       "titleRequired": "Введите заголовок заметки"
     },
     "packages": {
+      "checkFailed": "Не удалось проверить обновления: {{detail}}",
       "invalidSpec": "Недопустимая спецификация пакета",
       "listFailed": "Не удалось прочитать список плагинов OMP: {{detail}}",
       "missingBun": "Для установки и обновления npm-плагинов OMP нужен bun. Установите bun с https://bun.sh и повторите попытку.",
@@ -1050,6 +1051,7 @@
       "updatesAvailable_many": "Доступно {{count}} обновлений",
       "updatesAvailable_other": "Доступно {{count}} обновления",
       "updateToVersion": "Обновить до v{{version}}",
+      "upToDate": "Все пакеты обновлены",
       "versionUpdateArrow": "v{{from}} → v{{to}}"
     },
     "progress": {
