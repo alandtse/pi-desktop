@@ -319,6 +319,23 @@ test('session navigation uses open sessions in the active project, supports rema
   assert.equal(selected.length, 4)
 })
 
+test('the thinking blocks shortcut expands them all first, then collapses and expands again', async () => {
+  assert.equal(useAppStore.getState().allThinkingExpanded, null, 'blocks start on their own default')
+  handleAppShortcut(keyEvent({ key: 't', code: 'KeyT' }))
+  await settle()
+  assert.equal(useAppStore.getState().allThinkingExpanded, true)
+  // A held key must not flicker the whole conversation open and closed.
+  handleAppShortcut(keyEvent({ key: 't', code: 'KeyT', repeat: true }))
+  await settle()
+  assert.equal(useAppStore.getState().allThinkingExpanded, true)
+  handleAppShortcut(keyEvent({ key: 't', code: 'KeyT' }))
+  await settle()
+  assert.equal(useAppStore.getState().allThinkingExpanded, false)
+  handleAppShortcut(keyEvent({ key: 't', code: 'KeyT' }))
+  await settle()
+  assert.equal(useAppStore.getState().allThinkingExpanded, true)
+})
+
 test('push to talk holds while its keys are down and releases on its own key-up or a lost focus', () => {
   const commands: VoiceShortcutCommand[] = []
   const unsubscribe = onVoiceShortcut((command) => commands.push(command))

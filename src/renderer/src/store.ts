@@ -543,6 +543,12 @@ interface AppState {
   // Notes (reusable prompts / commands)
   notes: Note[]
   notePickerOpen: boolean
+  /**
+   * The last collapse-or-expand-all command for thinking blocks: true opens them
+   * all, false closes them all, null until the first command. Each block can
+   * still be toggled on its own afterwards.
+   */
+  allThinkingExpanded: boolean | null
   commandPaletteOpen: boolean
   taskLauncherOpen: boolean
   /** The linked task dialog on screen, or null when it is closed. */
@@ -878,6 +884,8 @@ interface AppActions {
   insertPrompt: (text: string, replace?: boolean) => void
   clearPendingInsert: () => void
   setNotePickerOpen: (open: boolean) => void
+  /** Collapse or expand every thinking block in the conversation at once. */
+  toggleAllThinking: () => void
   setCommandPalette: (open: boolean) => void
   setTaskLauncherOpen: (open: boolean) => void
   setLinkedTaskDialog: (view: LinkedTaskDialogView | null) => void
@@ -1953,6 +1961,7 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
 
   notes: [],
   notePickerOpen: false,
+  allThinkingExpanded: null,
   commandPaletteOpen: false,
   taskLauncherOpen: false,
   linkedTaskDialog: null,
@@ -5163,6 +5172,10 @@ export const useAppStore = create<AppState & AppActions>((set, get) => ({
   clearPendingInsert: () => set({ pendingInsert: null }),
 
   setNotePickerOpen: (open) => set({ notePickerOpen: open }),
+
+  // Blocks start closed, so the first command opens them all. A null initial
+  // value is what lets a block keep its own default until the user asks.
+  toggleAllThinking: () => set((state) => ({ allThinkingExpanded: !state.allThinkingExpanded })),
 
   setCommandPalette: (open) => set({ commandPaletteOpen: open }),
   setTaskLauncherOpen: (open) => set({ taskLauncherOpen: open }),
