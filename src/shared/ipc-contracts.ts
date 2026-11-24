@@ -153,7 +153,6 @@ export const IPC_CHANNELS = {
   /** Ask main to abort the running update; safe when nothing runs. */
   PACKAGE_UPDATE_CANCEL: 'package:update-cancel',
   /** Stop waiting for agent runtimes and update despite a turn in flight. */
-  PACKAGE_UPDATE_PROCEED: 'package:update-proceed',
   PACKAGE_CHECK_UPDATES: 'package:check-updates',
   PACKAGE_CATALOG_FETCH: 'package:catalog-fetch',
 
@@ -2031,13 +2030,11 @@ export interface PackageUpdate {
 /**
  * One step of a package update streamed to the renderer.
  *
- * `waiting-for-runtimes` is the part that used to be silent: main will not
- * replace the Pi CLI while any session runtime is still starting or running, so
- * the UI has to say it is waiting rather than look frozen. `output` carries the
- * CLI's own lines as they arrive, so a slow `npm install` shows something.
+ * Updates never wait for agent turns: replacing the CLI on disk is safe for a
+ * process that already loaded it. `output` carries the CLI's own lines as they
+ * arrive, so a slow `npm install` shows something instead of looking frozen.
  */
 export type PackageUpdatePhase =
-  | 'waiting-for-runtimes'
   | 'preparing'
   | 'running'
   | 'output'
@@ -2053,8 +2050,6 @@ export interface PackageUpdateProgress {
   target: string
   /** Engine whose CLI is running. */
   engine: AgentEngineKind
-  /** Runtimes still starting or running while `waiting-for-runtimes`. */
-  waitingRuntimes?: number
   /** One sanitized line of CLI output while `output`. */
   line?: string
   /** Finished steps and total steps, when the run knows its plan. */

@@ -10,9 +10,7 @@ import {
   beginPackageUpdate,
   cancelPackageUpdate,
   endPackageUpdate,
-  requestSkipRuntimeWait,
   setPackageUpdateEmitter,
-  shouldSkipRuntimeWait,
   updatePackageProgress,
   type PackageUpdateRun,
 } from '../package-update-progress'
@@ -27,7 +25,6 @@ import {
   ompUpdateInstallSpec,
   piRegistryQuery,
   PI_UPDATE_ALL_ARGS,
-  runtimesBlockingUpdate,
   type OmpNpmTarget,
   type OmpRegistryQuery,
   type UpdateCandidate,
@@ -97,14 +94,10 @@ export function registerPackageHandlers(ctx: IpcContext): void {
     const engine = activeEngine()
     const run = beginPackageUpdate(engine, 'all')
     try {
-      // A turn in flight is what this wait protects: replacing the CLI (and the
-      // shared npm tree its packages live in) mid-turn breaks that turn. An
-      // idle open session tab is NOT a reason to wait — its child process
-      // outlives the turn — and waiting on that made the old silent version
-      // look hung forever.
-      if (engine === 'pi' && !(await waitForAgentRuntimesToStop(workspaceManager, run))) {
-        return { success: false, output: t('errors.packages.updateCancelled') }
-      }
+      // No wait for agent turns. A running process keeps the CLI and the
+      // extension modules it already loaded, so replacing them on disk is safe;
+      // waiting instead meant that starting an update from the chat you were
+      // typing in made the button look dead until that turn ended.
       updatePackageProgress(run, { phase: 'running' })
       const result = await updateAllPackages(cwd, engine, run)
       endPackageUpdate(run, { success: result.success, error: result.success ? undefined : result.output })
@@ -118,11 +111,6 @@ export function registerPackageHandlers(ctx: IpcContext): void {
   ipcMain.handle(IPC_CHANNELS.PACKAGE_UPDATE_CANCEL, async (event) => {
     assertTrustedSender(event)
     return cancelPackageUpdate()
-  })
-
-  ipcMain.handle(IPC_CHANNELS.PACKAGE_UPDATE_PROCEED, async (event) => {
-    assertTrustedSender(event)
-    return requestSkipRuntimeWait()
   })
 
   ipcMain.handle(IPC_CHANNELS.PACKAGE_CHECK_UPDATES, async () => {
@@ -167,22 +155,6 @@ function streamOptions(run: PackageUpdateRun): PiCliStreamOptions {
  * flight, reporting a live count so the UI can say what it is waiting for.
  * Returns false when the user cancelled during the wait.
  */
-async function waitForAgentRuntimesToStop(
-  workspaceManager: IpcContext['workspaceManager'],
-  run: PackageUpdateRun,
-): Promise<boolean> {
-  for (;;) {
-    if (run.controller.signal.aborted) return false
-    // The user asked to update now rather than wait: their call, and the panel
-    // told them a turn is in flight.
-    if (shouldSkipRuntimeWait(run)) return true
-    const waitingRuntimes = runtimesBlockingUpdate(workspaceManager.getSessionRuntimes())
-    if (waitingRuntimes === 0) return true
-    updatePackageProgress(run, { phase: 'waiting-for-runtimes', waitingRuntimes })
-    await new Promise<void>((resolve) => setTimeout(resolve, 1_000))
-  }
-}
-
 const LIST_TIMEOUT_MS = 30_000
 const INSTALL_TIMEOUT_MS = 120_000
 const REMOVE_TIMEOUT_MS = 30_000
@@ -231,14 +203,30 @@ async function listInstalledPackages(cwd: string, engine: AgentEngineKind): Prom
   try {
     if (engine === 'omp') return listOmpPlugins(cwd)
     const packages: InstalledPackage[] = []
-    for (const { scope, settingsPath } of piPackageScopes(cwd)) {
-      const scopePackages = await readPackagesFromSettings(settingsPath)
-      packages.push(...scopePackages.map((p) => ({ ...p, scope })))
+    for (const { settingsPath, npmRoot } of piPackageScopes(cwd)) {
+      for (const pkg of await readPackagesFromSettings(settingsPath)) {
+        packages.push({ ...pkg, version: await installedVersionOf(pkg, npmRoot) })
+      }
     }
     return packages
   } catch {
     return []
   }
+}
+
+/**
+ * The version actually installed, not the pin in settings.
+ *
+ * `readPackagesFromSettings` derives `version` from the source string, which for
+ * an unpinned `npm:name` is null and for a pinned one is the pin — neither
+ * changes when an update lands. The row then looked untouched after updating,
+ * while the update arrow beside it disappeared. Reading package.json makes the
+ * list describe what is on disk.
+ */
+async function installedVersionOf(pkg: InstalledPackage, npmRoot: string): Promise<string | null> {
+  const query = piRegistryQuery(pkg.source)
+  const name = query?.name ?? extractPackageName(pkg.source)
+  return (name && (await readPackageVersion(join(npmRoot, 'node_modules', name, 'package.json')))) || pkg.version
 }
 
 /**

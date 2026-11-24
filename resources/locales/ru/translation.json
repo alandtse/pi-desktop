@@ -1064,16 +1064,10 @@
       "hideLog": "Скрыть вывод",
       "noOutputYet": "Пока нет вывода. Это может занять минуту.",
       "preparing": "Подготовка…",
-      "proceed": "Всё равно обновить",
-      "proceedHint": "Не ждать и обновить сейчас. Запущенный ход может завершиться ошибкой после замены CLI.",
       "running": "Обновление {{target}}…",
       "runningAll": "Обновление всех пакетов…",
       "showLog": "Показать вывод",
-      "step": "{{completed}} из {{total}}",
-      "waitingForRuntimes_one": "Ожидание завершения {{count}} выполняющегося хода перед заменой CLI {{engine}}…",
-      "waitingForRuntimes_few": "",
-      "waitingForRuntimes_many": "",
-      "waitingForRuntimes_other": "Ожидание завершения {{count}} выполняющихся ходов перед заменой CLI {{engine}}…"
+      "step": "{{completed}} из {{total}}"
     },
     "restartAction": "Перезапустить {{engine}}",
     "restartingAction": "Перезапуск {{engine}}…",

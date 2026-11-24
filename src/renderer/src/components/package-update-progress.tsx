@@ -1,10 +1,9 @@
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Ban, ChevronDown, ChevronRight, FastForward, Loader2 } from 'lucide-react'
+import { Ban, ChevronDown, ChevronRight, Loader2 } from 'lucide-react'
 import clsx from 'clsx'
 import type { PackageUpdateProgress } from '../../../shared/ipc-contracts'
 import type { Translate } from '../../../shared/i18n'
-import { agentEngineLabel } from '../../../shared/agent-engine-label'
 import { useAppStore } from '../store'
 import { formatSubagentDuration } from './subagent-task-row'
 
@@ -13,12 +12,9 @@ const TICK_MS = 1_000
 /**
  * What "Update all" is doing right now.
  *
- * It used to show nothing at all: main first waited for agent sessions to stop
- * so the Pi CLI could be replaced — keyed off process status, which an idle open
- * session tab holds forever — then ran npm/pi without forwarding a line, and the
- * Installed tab was replaced by a bare spinner. This panel names the phase,
- * counts the turns being waited on, offers "Update anyway", streams the CLI's
- * own output, shows elapsed time, and offers Cancel.
+ * It used to show nothing at all: main ran npm/pi without forwarding a line and
+ * replaced the Installed tab with a bare spinner. This panel names the phase,
+ * streams the CLI's own output, shows elapsed time, and offers Cancel.
  */
 export function PackageUpdateProgressPanel(): React.JSX.Element | null {
   const { t } = useTranslation()
@@ -27,7 +23,6 @@ export function PackageUpdateProgressPanel(): React.JSX.Element | null {
   const lines = useAppStore((state) => state.packageUpdateLines)
   const busy = useAppStore((state) => state.packageLoading)
   const cancel = useAppStore((state) => state.cancelPackageUpdate)
-  const proceed = useAppStore((state) => state.proceedWithPackageUpdate)
   const [showLog, setShowLog] = useState(false)
   const [cancelling, setCancelling] = useState(false)
   const [now, setNow] = useState(() => Date.now())
@@ -47,7 +42,6 @@ export function PackageUpdateProgressPanel(): React.JSX.Element | null {
     ? formatSubagentDuration(Math.floor((now - startedAt) / TICK_MS) * TICK_MS)
     : null
 
-  const phase = progress.phase
   const label = phaseLabel(progress, t)
   const total = progress.total ?? 0
   const completed = progress.completed ?? 0
@@ -78,17 +72,6 @@ export function PackageUpdateProgressPanel(): React.JSX.Element | null {
           )}
         </div>
         <div className="flex shrink-0 items-center gap-1">
-          {phase === 'waiting-for-runtimes' && (
-            <button
-              type="button"
-              onClick={() => void proceed()}
-              title={t('packages.progress.proceedHint')}
-              className="flex items-center gap-1 rounded px-2 py-1 text-[11px] text-accent transition-colors hover:bg-highlight-strong"
-            >
-              <FastForward size={11} />
-              {t('packages.progress.proceed')}
-            </button>
-          )}
           <button
             type="button"
             onClick={() => {
@@ -143,11 +126,6 @@ export function PackageUpdateProgressPanel(): React.JSX.Element | null {
 /** The phase in words; the runtime wait names the engine whose CLI is blocked. */
 function phaseLabel(progress: PackageUpdateProgress, t: Translate): string {
   switch (progress.phase) {
-    case 'waiting-for-runtimes':
-      return t('packages.progress.waitingForRuntimes', {
-        count: progress.waitingRuntimes ?? 1,
-        engine: agentEngineLabel(progress.engine),
-      })
     case 'preparing':
       return t('packages.progress.preparing')
     case 'running':
