@@ -711,7 +711,11 @@ export class WorkspaceManager {
   async restartSessionRuntime(runtimeId: string, options: PiStartOptions = {}): Promise<SessionRuntimeInfo> {
     const entry = this.sessionRuntimes.get(runtimeId)
     if (!entry) throw new Error(t('errors.session.runtimeNotFound', { runtimeId }))
-    entry.manager.stop()
+    // A turn in progress ends with the old process. Going through
+    // stopSessionRuntime clears its 'working' mark first: `manager.stop()` alone
+    // leaves it, and the new idle process never ends a turn, so the chat stays
+    // marked working forever — which reads as the restart having done nothing.
+    this.stopSessionRuntime(runtimeId)
     return this.startSessionRuntime(runtimeId, options)
   }
 

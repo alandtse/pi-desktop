@@ -623,6 +623,32 @@ test('a restart before the first answer starts a new session, not a missing or o
   })
 })
 
+test('a restart mid-turn clears the working mark, so the new process is not reported mid-turn', async () => {
+  await freshDataDir()
+
+  await withManager(async (mgr) => {
+    const workspace = await mgr.createWorkspace('Alpha', await project())
+    const { runtime, process } = await liveRuntime(mgr, workspace.id, 9300)
+    mgr.setSessionRuntimeActivity(runtime.runtimeId, 'working')
+    const seen: SessionRuntimeInfo[] = []
+    mgr.onSessionRuntime((snapshot) => seen.push(snapshot))
+    // subscribing replays the mid-turn snapshot recorded before the restart
+    seen.length = 0
+
+    await mgr.restartSessionRuntime(runtime.runtimeId)
+
+    assert.equal(process.starts >= 1, true, 'the restart spawns a new process')
+    assert.equal(mgr.getSessionRuntime(runtime.runtimeId)?.activity, null, 'the turn ended with the old process')
+    const running = seen.filter((snapshot) => snapshot.status === 'running')
+    assert.ok(running.length > 0, 'the renderer is told the new process runs')
+    assert.equal(
+      running.some((snapshot) => snapshot.activity === 'working'),
+      false,
+      'an idle new process never ends the old turn, so the chat would stay working'
+    )
+  })
+})
+
 test('the auto-delete guard refuses a file it cannot prove is a throwaway', async () => {
   await withSessionStores(async (roots) => {
     const inStore = await storedSession(roots.pi, 'guard.jsonl', { type: 'session', id: 'guard' })
