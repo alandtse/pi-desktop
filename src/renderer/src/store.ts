@@ -467,7 +467,7 @@ interface AppState {
   catalogPackages: CatalogPackage[]
   packageLoading: boolean // install/remove/update operations (affects the Installed tab)
   catalogLoading: boolean // catalog crawl (Catalog tab only)
-  packageNotification: { type: 'success' | 'error'; message: string } | null
+  packageNotification: PackageNotification | null
   packageUpdates: PackageUpdate[] // installed packages with a newer registry version
   packageUpdatesChecking: boolean
 
@@ -1762,6 +1762,20 @@ async function runArbiterStep(
 }
 
 /**
+ * A package result shown above the Installed tab.
+ *
+ *  records whether packages on disk actually moved, which is what
+ * decides whether the banner offers a restart: the message cannot carry that
+ * meaning on its own, and parsing the sentence back into a decision would
+ * break the moment the wording is translated.
+ */
+export interface PackageNotification {
+  type: 'success' | 'error'
+  message: string
+  changed?: boolean
+}
+
+/**
  * Run one package install/remove/update under the Installed tab's shared
  * loading flag and notification banner. The list refreshes even on failure:
  * a multi-package update can fail after changing some packages.
@@ -1779,7 +1793,7 @@ async function runPackageMutation(
     await get().loadInstalledPackages()
     set({
       packageNotification: result.success
-        ? { type: 'success', message: successMessage }
+        ? { type: 'success', message: successMessage, changed: true }
         : { type: 'error', message: result.output || failureMessage },
     })
   } catch (err) {

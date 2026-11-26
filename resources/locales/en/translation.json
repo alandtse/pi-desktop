@@ -50,11 +50,11 @@
     },
     "composer": {
       "placeholderIdle": "Ask {{agent}} anything — / for commands",
+      "placeholderLoading": "Type now — this chat is still loading, and your message is sent once it opens",
       "placeholderNotRunning": "{{agent}} agent is not running...",
       "placeholderQueue": "Type to queue a message — Ctrl+Enter sends it now",
       "placeholderRemote": "Ask the session on {{name}} anything — / for commands",
-      "placeholderStarting": "Type now — {{agent}} is starting, and your message is sent when it is ready",
-      "placeholderLoading": "Type now — this chat is still loading, and your message is sent once it opens"
+      "placeholderStarting": "Type now — {{agent}} is starting, and your message is sent when it is ready"
     },
     "council": {
       "planWithCouncil": "Plan with Council",
@@ -74,13 +74,13 @@
       "askRequired": "Answer the required questions to continue",
       "askSubmit": "Submit answers",
       "editFallbackTitle": "Edit",
+      "fromSession": "Asked by {{session}}",
       "hideForNowWithShortcut": "Hide for now ({{shortcut}})",
       "inputFallbackTitle": "Input",
       "notificationFallback": "Notification",
       "selectFallbackTitle": "Select",
       "showWithShortcut": "Show ({{shortcut}})",
-      "waitingForAnswer": "Pi is waiting for an answer",
-      "fromSession": "Asked by {{session}}"
+      "waitingForAnswer": "Pi is waiting for an answer"
     },
     "insertNote": {
       "ariaLabel": "Insert note",
@@ -91,6 +91,10 @@
     "mentionPopup": {
       "insertHint": "↑↓ navigate · Enter/Tab insert path · Esc close"
     },
+    "mesh": {
+      "from": "From {{from}}",
+      "unknownSender": "From an unnamed peer"
+    },
     "message": {
       "branchedFrom": "Branched from: \"{{excerpt}}\"",
       "branchFromHere": "Branch from here",
@@ -99,6 +103,9 @@
     },
     "nextSteps": {
       "title": "Suggested next steps"
+    },
+    "pairing": {
+      "expiresAt": "Code valid until {{time}}"
     },
     "projectPicker": {
       "noProject": "No project",
@@ -180,6 +187,13 @@
       "renderSvg": "Render SVG",
       "viewSource": "View source"
     },
+    "todo": {
+      "allDone": "{{n}} done",
+      "hide": "Hide the task list",
+      "remaining": "{{n}} left of {{total}}",
+      "title": "Tasks",
+      "toggle": "Show or hide the task list"
+    },
     "toolbar": {
       "diffViewer": "Diff viewer",
       "fileTree": "File tree",
@@ -204,21 +218,7 @@
       "stopTitle": "Stop and insert text",
       "transcribing": "Transcribing your voice"
     },
-    "waitingForResponse": "Waiting for response...",
-    "pairing": {
-      "expiresAt": "Code valid until {{time}}"
-    },
-    "todo": {
-      "title": "Tasks",
-      "toggle": "Show or hide the task list",
-      "remaining": "{{n}} left of {{total}}",
-      "allDone": "{{n}} done",
-      "hide": "Hide the task list"
-    },
-    "mesh": {
-      "from": "From {{from}}",
-      "unknownSender": "From an unnamed peer"
-    }
+    "waitingForResponse": "Waiting for response..."
   },
   "commandGroups": {
     "commands": "Commands",
@@ -1613,8 +1613,8 @@
     },
     "sessionNamePlaceholder": "Session name",
     "sessionRow": {
-      "remoteBadge": "Session on {{host}}",
       "meshLiveBadge": "Session on this machine, reachable from other paired machines",
+      "remoteBadge": "Session on {{host}}",
       "tooltipActive": "{{title}}\n\nClick to open · double-click to rename · right-click for actions",
       "tooltipInactive": "{{title}}\n\nClick to open · right-click for actions"
     },
@@ -1851,8 +1851,9 @@
       "error": "Error: {{detail}}",
       "followUpError": "Follow-up error: {{detail}}",
       "imageFallbackName": "Image {{index}}",
-      "installedPackage": "Installed {{spec}}. Restart Pi to load it.",
+      "installedPackage": "Installed {{spec}}.",
       "installFailed": "Install failed",
+      "loadsOnStart": "Loads on the next start",
       "modelError": "Model error: {{detail}}",
       "modelsFileNotLoaded": "The models file has not loaded yet. Try again.",
       "newIsolatedTabError": "New isolated tab error: {{detail}}",
@@ -1867,6 +1868,8 @@
       "removePackageFailed": "Remove failed",
       "removeWorkspaceError": "Remove workspace error: {{detail}}",
       "respondError": "Could not answer the remote prompt: {{detail}}",
+      "restartBusy": "{{engine}} is starting…",
+      "restartEngine": "Restart {{engine}}",
       "retrying": "Retrying (attempt {{attempt}}/{{maxAttempts}}): {{detail}}",
       "reusedWorktree": "Found the related existing Git worktree and continued the task there.",
       "sendError": "Could not send to the remote session: {{detail}}",
@@ -1880,8 +1883,8 @@
       "truncatedHistory_other": "Showing the latest {{count}} of {{total}} messages for performance. Older turns are still on disk in the session file.",
       "unarchiveError": "Unarchive error: {{detail}}",
       "unknownError": "Unknown error",
-      "updatedAllPackages": "Updated packages. Restart Pi to load them.",
-      "updatedPackage": "Updated {{spec}}. Restart Pi to load it.",
+      "updatedAllPackages": "Updated packages.",
+      "updatedPackage": "Updated {{spec}}.",
       "updatePackageFailed": "Update failed",
       "writeFailed": "Write failed"
     },

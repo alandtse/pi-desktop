@@ -50,11 +50,11 @@
     },
     "composer": {
       "placeholderIdle": "Задайте задачу для {{agent}} — / для команд",
+      "placeholderLoading": "Пишите сейчас — чат ещё загружается, сообщение отправится, когда он откроется",
       "placeholderNotRunning": "Агент {{agent}} не запущен…",
       "placeholderQueue": "Сообщение в очередь — Ctrl+Enter отправит сразу",
       "placeholderRemote": "Спросите сеанс на {{name}} — / для команд",
-      "placeholderStarting": "Можно печатать — {{agent}} запускается, сообщение уйдёт, когда он будет готов",
-      "placeholderLoading": "Пишите сейчас — чат ещё загружается, сообщение отправится, когда он откроется"
+      "placeholderStarting": "Можно печатать — {{agent}} запускается, сообщение уйдёт, когда он будет готов"
     },
     "council": {
       "planWithCouncil": "Планирование с советом",
@@ -74,13 +74,13 @@
       "askRequired": "Ответьте на обязательные вопросы, чтобы продолжить",
       "askSubmit": "Отправить ответы",
       "editFallbackTitle": "Изменить",
+      "fromSession": "Спрашивает {{session}}",
       "hideForNowWithShortcut": "Пока скрыть ({{shortcut}})",
       "inputFallbackTitle": "Ввод",
       "notificationFallback": "Уведомление",
       "selectFallbackTitle": "Выбрать",
       "showWithShortcut": "Показать ({{shortcut}})",
-      "waitingForAnswer": "Pi ждёт ответа",
-      "fromSession": "Спрашивает {{session}}"
+      "waitingForAnswer": "Pi ждёт ответа"
     },
     "insertNote": {
       "ariaLabel": "Вставить заметку",
@@ -91,6 +91,10 @@
     "mentionPopup": {
       "insertHint": "↑↓ навигация · Enter/Tab вставить путь · Esc закрыть"
     },
+    "mesh": {
+      "from": "От {{from}}",
+      "unknownSender": "От неизвестного узла"
+    },
     "message": {
       "branchedFrom": "Ответвление от: «{{excerpt}}»",
       "branchFromHere": "Создать ответвление отсюда",
@@ -99,6 +103,9 @@
     },
     "nextSteps": {
       "title": "Предлагаемые шаги"
+    },
+    "pairing": {
+      "expiresAt": "Код действителен до {{time}}"
     },
     "projectPicker": {
       "noProject": "Без проекта",
@@ -194,6 +201,13 @@
       "renderSvg": "Показать SVG",
       "viewSource": "Исходный код"
     },
+    "todo": {
+      "allDone": "Готово: {{n}}",
+      "hide": "Скрыть список задач",
+      "remaining": "Осталось {{n}} из {{total}}",
+      "title": "Задачи",
+      "toggle": "Показать или скрыть список задач"
+    },
     "toolbar": {
       "diffViewer": "Просмотр изменений",
       "fileTree": "Дерево файлов",
@@ -220,21 +234,7 @@
       "stopTitle": "Остановить и вставить текст",
       "transcribing": "Распознавание речи"
     },
-    "waitingForResponse": "Ожидание ответа…",
-    "pairing": {
-      "expiresAt": "Код действителен до {{time}}"
-    },
-    "todo": {
-      "title": "Задачи",
-      "toggle": "Показать или скрыть список задач",
-      "remaining": "Осталось {{n}} из {{total}}",
-      "allDone": "Готово: {{n}}",
-      "hide": "Скрыть список задач"
-    },
-    "mesh": {
-      "from": "От {{from}}",
-      "unknownSender": "От неизвестного узла"
-    }
+    "waitingForResponse": "Ожидание ответа…"
   },
   "commandGroups": {
     "commands": "Команды",
@@ -1675,8 +1675,8 @@
     },
     "sessionNamePlaceholder": "Название сессии",
     "sessionRow": {
-      "remoteBadge": "Сеанс на {{host}}",
       "meshLiveBadge": "Сессия на этой машине, доступна с других спаренных машин",
+      "remoteBadge": "Сеанс на {{host}}",
       "tooltipActive": "{{title}}\n\nЩелчок — открыть · двойной — переименовать · правой кнопкой — действия",
       "tooltipInactive": "{{title}}\n\nЩелчок — открыть · правой кнопкой — действия"
     },
@@ -1923,8 +1923,9 @@
       "error": "Ошибка: {{detail}}",
       "followUpError": "Ошибка продолжения: {{detail}}",
       "imageFallbackName": "Изображение {{index}}",
-      "installedPackage": "Установлен {{spec}}. Перезапустите Pi для загрузки.",
+      "installedPackage": "Установлен {{spec}}.",
       "installFailed": "Ошибка установки",
+      "loadsOnStart": "Загрузится при следующем запуске",
       "modelError": "Ошибка модели: {{detail}}",
       "modelsFileNotLoaded": "Файл моделей ещё не загружен. Повторите попытку.",
       "newIsolatedTabError": "Ошибка новой изолированной вкладки: {{detail}}",
@@ -1941,6 +1942,8 @@
       "removePackageFailed": "Ошибка удаления",
       "removeWorkspaceError": "Ошибка удаления проекта: {{detail}}",
       "respondError": "Не удалось ответить на удалённый запрос: {{detail}}",
+      "restartBusy": "{{engine}} запускается…",
+      "restartEngine": "Перезапустить {{engine}}",
       "retrying": "Повторная попытка ({{attempt}}/{{maxAttempts}}): {{detail}}",
       "reusedWorktree": "Найдено подходящее рабочее дерево Git. Задача продолжена в нём.",
       "sendError": "Не удалось отправить в удалённый сеанс: {{detail}}",
@@ -1956,8 +1959,8 @@
       "truncatedHistory_other": "Для быстродействия показаны последние {{count}} из {{total}} сообщений. Более ранние ходы остаются в файле сессии на диске.",
       "unarchiveError": "Ошибка извлечения из архива: {{detail}}",
       "unknownError": "Неизвестная ошибка",
-      "updatedAllPackages": "Пакеты обновлены. Перезапустите Pi для загрузки.",
-      "updatedPackage": "Обновлён {{spec}}. Перезапустите Pi для загрузки.",
+      "updatedAllPackages": "Пакеты обновлены.",
+      "updatedPackage": "Обновлён {{spec}}.",
       "updatePackageFailed": "Ошибка обновления",
       "writeFailed": "Ошибка записи"
     },

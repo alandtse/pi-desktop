@@ -50,11 +50,11 @@
     },
     "composer": {
       "placeholderIdle": "向 {{agent}} 提问 — 输入 / 使用命令",
+      "placeholderLoading": "现在就可以输入 —— 会话仍在加载，打开后会自动发送",
       "placeholderNotRunning": "{{agent}} 智能体未在运行…",
       "placeholderQueue": "输入消息以加入队列 — Ctrl+Enter 立即发送",
       "placeholderRemote": "向 {{name}} 上的会话提问 — 输入 / 使用命令",
-      "placeholderStarting": "现在就能输入 — {{agent}} 正在启动，就绪后会自动发送",
-      "placeholderLoading": "现在就可以输入 —— 会话仍在加载，打开后会自动发送"
+      "placeholderStarting": "现在就能输入 — {{agent}} 正在启动，就绪后会自动发送"
     },
     "council": {
       "planWithCouncil": "使用委员会规划",
@@ -74,13 +74,13 @@
       "askRequired": "请回答必填问题以继续",
       "askSubmit": "提交答案",
       "editFallbackTitle": "编辑",
+      "fromSession": "来自 {{session}} 的提问",
       "hideForNowWithShortcut": "暂时隐藏（{{shortcut}}）",
       "inputFallbackTitle": "输入",
       "notificationFallback": "通知",
       "selectFallbackTitle": "选择",
       "showWithShortcut": "显示（{{shortcut}}）",
-      "waitingForAnswer": "Pi 正在等待回答",
-      "fromSession": "来自 {{session}} 的提问"
+      "waitingForAnswer": "Pi 正在等待回答"
     },
     "insertNote": {
       "ariaLabel": "插入笔记",
@@ -91,6 +91,10 @@
     "mentionPopup": {
       "insertHint": "↑↓ 选择 · Enter/Tab 插入路径 · Esc 关闭"
     },
+    "mesh": {
+      "from": "来自 {{from}}",
+      "unknownSender": "来自未命名对端"
+    },
     "message": {
       "branchedFrom": "分支自：“{{excerpt}}”",
       "branchFromHere": "从此处创建分支",
@@ -99,6 +103,9 @@
     },
     "nextSteps": {
       "title": "建议的后续步骤"
+    },
+    "pairing": {
+      "expiresAt": "代码有效期至 {{time}}"
     },
     "projectPicker": {
       "noProject": "无项目",
@@ -173,6 +180,13 @@
       "renderSvg": "渲染 SVG",
       "viewSource": "查看源码"
     },
+    "todo": {
+      "allDone": "已完成 {{n}}",
+      "hide": "隐藏任务列表",
+      "remaining": "剩余 {{n}} / {{total}}",
+      "title": "任务",
+      "toggle": "显示或隐藏任务列表"
+    },
     "toolbar": {
       "diffViewer": "差异查看器",
       "fileTree": "文件树",
@@ -196,21 +210,7 @@
       "stopTitle": "停止并插入文本",
       "transcribing": "正在转写你的语音"
     },
-    "waitingForResponse": "正在等待回答…",
-    "pairing": {
-      "expiresAt": "代码有效期至 {{time}}"
-    },
-    "todo": {
-      "title": "任务",
-      "toggle": "显示或隐藏任务列表",
-      "remaining": "剩余 {{n}} / {{total}}",
-      "allDone": "已完成 {{n}}",
-      "hide": "隐藏任务列表"
-    },
-    "mesh": {
-      "from": "来自 {{from}}",
-      "unknownSender": "来自未命名对端"
-    }
+    "waitingForResponse": "正在等待回答…"
   },
   "commandGroups": {
     "commands": "命令",
@@ -1582,8 +1582,8 @@
     },
     "sessionNamePlaceholder": "会话名称",
     "sessionRow": {
-      "remoteBadge": "{{host}} 上的会话",
       "meshLiveBadge": "此机器上的会话，可从其他已配对机器访问",
+      "remoteBadge": "{{host}} 上的会话",
       "tooltipActive": "{{title}}\n\n点击打开 · 双击重命名 · 右键查看操作",
       "tooltipInactive": "{{title}}\n\n点击打开 · 右键查看操作"
     },
@@ -1815,8 +1815,9 @@
       "error": "错误：{{detail}}",
       "followUpError": "追问发送错误：{{detail}}",
       "imageFallbackName": "图片 {{index}}",
-      "installedPackage": "已安装 {{spec}}。重启 Pi 以加载它。",
+      "installedPackage": "已安装 {{spec}}。",
       "installFailed": "安装失败",
+      "loadsOnStart": "下次启动时加载",
       "modelError": "模型错误：{{detail}}",
       "modelsFileNotLoaded": "模型文件尚未加载，请重试。",
       "newIsolatedTabError": "新建隔离标签页错误：{{detail}}",
@@ -1830,6 +1831,8 @@
       "removePackageFailed": "移除失败",
       "removeWorkspaceError": "移除工作区错误：{{detail}}",
       "respondError": "无法回答远程提示：{{detail}}",
+      "restartBusy": "{{engine}} 正在启动…",
+      "restartEngine": "重启 {{engine}}",
       "retrying": "正在重试（第 {{attempt}}/{{maxAttempts}} 次）：{{detail}}",
       "reusedWorktree": "找到了相关的现有 Git 工作树，并在那里继续任务。",
       "sendError": "无法发送到远程会话：{{detail}}",
@@ -1842,8 +1845,8 @@
       "truncatedHistory_other": "为提升性能，仅显示最近 {{count}}/{{total}} 条消息。较早的对话仍保存在会话文件中。",
       "unarchiveError": "取消归档错误：{{detail}}",
       "unknownError": "未知错误",
-      "updatedAllPackages": "已更新包。重启 Pi 以加载它们。",
-      "updatedPackage": "已更新 {{spec}}。重启 Pi 以加载它。",
+      "updatedAllPackages": "已更新包。",
+      "updatedPackage": "已更新 {{spec}}。",
       "updatePackageFailed": "更新失败",
       "writeFailed": "写入失败"
     },

@@ -22,6 +22,8 @@ import {
   CircleArrowUp,
 } from 'lucide-react'
 import { isImeComposing } from '../utils/ime-composing'
+import { packageRestartNeed } from '../utils/package-restart'
+import { agentEngineLabel, DEFAULT_AGENT_ENGINE_LABEL } from '../../../shared/agent-engine-label'
 
 export function PackageBrowser(): React.JSX.Element {
   const { t } = useTranslation()
@@ -40,8 +42,19 @@ export function PackageBrowser(): React.JSX.Element {
   const checkPackageUpdates = useAppStore((state) => state.checkPackageUpdates)
   const loadCatalog = useAppStore((state) => state.loadCatalog)
   const clearPackageNotification = useAppStore((state) => state.clearPackageNotification)
+  const restartPi = useAppStore((state) => state.restartPi)
+  const piStatus = useAppStore((state) => state.piStatus)
+  const piEngine = useAppStore((state) => state.piEngine)
   const installedSkills = useAppStore((state) => state.installedSkills)
   const loadSkills = useAppStore((state) => state.loadSkills)
+
+  const engineLabel = agentEngineLabel(piEngine) ?? DEFAULT_AGENT_ENGINE_LABEL
+  // A package change only lands when Pi next starts, so the banner that reports it
+  // has to be able to act on that — a message telling the user to restart with
+  // nowhere to do it reads as broken. The wording also depends on whether anything
+  // is running: with the engine stopped the next start loads the change by itself,
+  // so the instruction is dropped rather than left to mislead.
+  const restartNeed = packageNotification ? packageRestartNeed({ changed: packageNotification.changed === true, piStatus }) : null
 
   // Memoized so the tab components (below, React.memo'd) don't re-render just
   // because this Set was rebuilt on an unrelated render.
@@ -130,6 +143,31 @@ export function PackageBrowser(): React.JSX.Element {
             : <AlertCircle size={15} className="mt-0.5 shrink-0" />
           }
           <span className="flex-1 text-xs leading-relaxed">{packageNotification.message}</span>
+          {restartNeed === 'restart' && (
+            <button
+              type="button"
+              onClick={() => void restartPi()}
+              className={clsx(
+                'flex shrink-0 items-center gap-1 rounded border border-current px-2 py-0.5 text-xs',
+                'opacity-80 transition-opacity hover:opacity-100'
+              )}
+            >
+              <RefreshCw size={11} />
+              {t('store.messages.restartEngine', { engine: engineLabel })}
+            </button>
+          )}
+          {/* Nothing is holding the old code, so state that it loads on its own
+              rather than offering a restart of something that is not running. */}
+          {restartNeed === 'nothingRunning' && (
+            <span className="shrink-0 text-xs text-faint opacity-80">
+              {t('store.messages.loadsOnStart')}
+            </span>
+          )}
+          {restartNeed === 'busy' && (
+            <span className="shrink-0 text-xs text-faint opacity-80">
+              {t('store.messages.restartBusy', { engine: engineLabel })}
+            </span>
+          )}
           <button
             type="button"
             onClick={clearPackageNotification}
